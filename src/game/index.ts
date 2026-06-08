@@ -10,6 +10,18 @@ import {
   DEFAULT_MIN_RAISE,
 } from '../engine/constants';
 
+/** 深度克隆 GameState，确保 players 数组及内部对象不共享引用 */
+function deepCloneState(state: GameState): GameState {
+  return {
+    ...state,
+    players: state.players.map(p => ({
+      ...p,
+      holeCards: [...p.holeCards],
+      handRank: p.handRank ? { ...p.handRank, bestCards: [...p.handRank.bestCards] } : undefined,
+    })),
+  };
+}
+
 export function createGame(playerCount: number, difficulty: Difficulty, startingChips: number = DEFAULT_STARTING_CHIPS, playerName: string = ''): GameState {
   const players: Player[] = [];
   for (let i = 0; i < playerCount; i++) {
@@ -62,7 +74,7 @@ function findNextNonOut(players: Player[], startIndex: number): number {
 }
 
 export function startHand(state: GameState): GameState {
-  const newState = { ...state };
+  const newState = deepCloneState(state);
   const deck = deckUtils.shuffleDeck(deckUtils.createDeck());
 
   for (let i = 0; i < newState.players.length; i++) {
@@ -154,7 +166,7 @@ export function startHand(state: GameState): GameState {
 }
 
 export function performAction(state: GameState, action: ActionType, amount: number = 0): GameState {
-  const newState = { ...state };
+  const newState = deepCloneState(state);
   const player = newState.players[newState.currentPlayerIndex];
   const validActions = getValidActions(newState, newState.currentPlayerIndex);
 
@@ -270,7 +282,7 @@ export function isRoundComplete(state: GameState): boolean {
 }
 
 export function advanceRound(state: GameState): GameState {
-  const newState = { ...state };
+  const newState = deepCloneState(state);
 
   const nextRoundMap: Record<Round, Round> = {
     [Round.Preflop]: Round.Flop,
@@ -343,7 +355,7 @@ export function advanceRound(state: GameState): GameState {
 }
 
 export function showdown(state: GameState): GameState {
-  const newState = { ...state };
+  const newState = deepCloneState(state);
 
   // 收集剩余的赌注到 pot 和 totalBet
   for (const player of newState.players) {
@@ -436,7 +448,7 @@ export function showdown(state: GameState): GameState {
 
     for (let i = 0; i < potWinners.length; i++) {
       const w = potWinners[i];
-      const extra = i === 0 ? remainder : 0; // 余数给第一个赢家
+      const extra = i < remainder ? 1 : 0; // 余数分摊给前 remainder 个赢家
       const existing = totalWinners.get(w.playerId) || { amount: 0, handResult: w.handResult };
       totalWinners.set(w.playerId, {
         amount: existing.amount + share + extra,

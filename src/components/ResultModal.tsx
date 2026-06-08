@@ -1,6 +1,6 @@
-import { useRef, useState, useCallback } from 'react';
 import type { Winner as WinnerType, HandResult } from '../engine/types';
 import type { Player } from '../engine/types';
+import { HAND_NAMES } from '../engine/constants';
 
 interface ResultModalProps {
   winners: WinnerType[];
@@ -8,83 +8,37 @@ interface ResultModalProps {
   onNewHand: () => void;
 }
 
-const HAND_NAMES = ['高牌', '一对', '两对', '三条', '顺子', '同花', '葫芦', '四条', '同花顺', '皇家同花顺'];
-
 function getHandLabel(handResult?: HandResult): string {
   if (!handResult) return '';
-  return handResult.description || HAND_NAMES[handResult.rank] || '';
+  const names = HAND_NAMES as readonly string[];
+  return handResult.description || names[handResult.rank] || '';
+}
+
+function winnerName(players: Player[], winner: WinnerType) {
+  const player = players.find(p => p.id === winner.playerId);
+  return player ? player.name : `玩家 ${winner.playerId + 1}`;
 }
 
 export function ResultModal({ winners, players, onNewHand }: ResultModalProps) {
-  const [pos, setPos] = useState({ x: 0, y: 0 });
-  const dragging = useRef(false);
-  const dragStart = useRef({ x: 0, y: 0 });
-  const posRef = useRef({ x: 0, y: 0 });
-
-  const handleMouseDown = useCallback((e: React.MouseEvent) => {
-    dragging.current = true;
-    dragStart.current = { x: e.clientX - posRef.current.x, y: e.clientY - posRef.current.y };
-  }, []);
-
-  const handleTouchStart = useCallback((e: React.TouchEvent) => {
-    if (e.touches.length === 1) {
-      dragging.current = true;
-      dragStart.current = { x: e.touches[0].clientX - posRef.current.x, y: e.touches[0].clientY - posRef.current.y };
-    }
-  }, []);
-
-  const handleMove = useCallback((e: React.MouseEvent | React.TouchEvent) => {
-    if (!dragging.current) return;
-    e.preventDefault();
-    let cx: number, cy: number;
-    if ('touches' in e) {
-      if (e.touches.length !== 1) return;
-      cx = e.touches[0].clientX;
-      cy = e.touches[0].clientY;
-    } else {
-      cx = e.clientX;
-      cy = e.clientY;
-    }
-    const newX = cx - dragStart.current.x;
-    const newY = cy - dragStart.current.y;
-    posRef.current = { x: newX, y: newY };
-    setPos({ x: newX, y: newY });
-  }, []);
-
-  const handleUp = useCallback(() => {
-    dragging.current = false;
-  }, []);
-
-  const winnerName = (winner: WinnerType) => {
-    const player = players.find(p => p.id === winner.playerId);
-    return player ? player.name : `玩家 ${winner.playerId + 1}`;
-  };
-
   const hasMultipleWinners = winners.length > 1;
 
   return (
     <div
-      onMouseMove={handleMove}
-      onMouseUp={handleUp}
-      onMouseLeave={handleUp}
-      onTouchMove={handleMove}
-      onTouchEnd={handleUp}
       style={{
         position: 'fixed',
         top: 0,
         left: 0,
         right: 0,
         bottom: 0,
-        pointerEvents: 'auto',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
         zIndex: 200,
+        animation: 'fadeIn 0.3s ease',
       }}
     >
       <div
         style={{
-          position: 'absolute',
-          left: `calc(50% + ${pos.x}px)`,
-          top: `calc(50% + ${pos.y}px)`,
-          transform: 'translate(-50%, -50%)',
           background: '#2c3e50',
           borderRadius: 16,
           textAlign: 'center',
@@ -93,14 +47,10 @@ export function ResultModal({ winners, players, onNewHand }: ResultModalProps) {
           width: '90%',
           border: '2px solid #f39c12',
           boxShadow: '0 8px 32px rgba(0,0,0,0.5)',
-          userSelect: dragging.current ? 'none' : 'auto',
         }}
       >
         <div
-          onMouseDown={handleMouseDown}
-          onTouchStart={handleTouchStart}
           style={{
-            cursor: 'grab',
             padding: '16px 40px 12px',
             borderBottom: '1px solid rgba(255,255,255,0.08)',
             display: 'flex',
@@ -110,14 +60,7 @@ export function ResultModal({ winners, players, onNewHand }: ResultModalProps) {
           }}
         >
           <span style={{ fontSize: 20 }}>🎉</span>
-          <h2
-            style={{
-              color: '#f39c12',
-              fontSize: 20,
-              fontWeight: 'bold',
-              margin: 0,
-            }}
-          >
+          <h2 style={{ color: '#f39c12', fontSize: 20, fontWeight: 'bold', margin: 0 }}>
             牌局结果
           </h2>
           <span style={{ fontSize: 20 }}>🎉</span>
@@ -137,7 +80,7 @@ export function ResultModal({ winners, players, onNewHand }: ResultModalProps) {
                 }}
               >
                 <div style={{ fontSize: 15, fontWeight: 'bold', color: '#ecf0f1', marginBottom: 4 }}>
-                  {winnerName(winner)}
+                  {winnerName(players, winner)}
                 </div>
                 <div style={{ fontSize: 14, color: '#2ecc71', fontWeight: 'bold', marginBottom: hasMultipleWinners ? 0 : 4 }}>
                   🪙 {winner.amount}

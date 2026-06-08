@@ -1,6 +1,6 @@
 import { ActionType } from '../engine/types';
 import type { GameState } from '../engine/types';
-import { AIDecision, AILevel } from './types';
+import { AIDecision, AILevel, getValidActionsForAI, getRaiseTotal } from './types';
 import * as evaluator from '../engine/evaluator';
 
 export const easyAI: AILevel = {
@@ -14,8 +14,10 @@ export const easyAI: AILevel = {
       return { action: ActionType.Fold };
     }
 
-    const playerCards = [...player.holeCards, ...state.communityCards];
-    const handResult = evaluator.evaluateHand(playerCards);
+    const hasCommunityCards = state.communityCards.length >= 3;
+    const handResult = hasCommunityCards
+      ? evaluator.evaluateHand([...player.holeCards, ...state.communityCards])
+      : { rank: 0, value: 0, description: '高牌', bestCards: player.holeCards };
 
     const rand = Math.random();
 
@@ -49,34 +51,3 @@ export const easyAI: AILevel = {
     return { action: ActionType.Fold };
   },
 };
-
-function getValidActionsForAI(state: GameState): ActionType[] {
-  if (state.currentPlayerIndex === -1) return [];
-  const player = state.players[state.currentPlayerIndex];
-  if (!player || player.folded || player.isAllIn) return [];
-
-  const actions: ActionType[] = [ActionType.Fold];
-
-  if (state.maxBet === 0 || player.currentBet === state.maxBet) {
-    actions.push(ActionType.Check);
-  }
-
-  if (state.maxBet > player.currentBet && player.chips >= (state.maxBet - player.currentBet)) {
-    actions.push(ActionType.Call);
-  }
-
-  const minRaise = state.maxBet + state.minRaise - player.currentBet;
-  if (player.chips >= minRaise && minRaise > 0) {
-    actions.push(ActionType.Raise);
-  }
-
-  if (player.chips > 0) {
-    actions.push(ActionType.AllIn);
-  }
-
-  return actions;
-}
-
-function getRaiseTotal(state: GameState, player: GameState['players'][number], extra: number): number {
-  return Math.min(player.currentBet + player.chips, state.maxBet + state.minRaise + extra);
-}

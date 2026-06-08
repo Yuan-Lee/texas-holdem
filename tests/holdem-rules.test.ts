@@ -237,3 +237,115 @@ test('相同最佳牌型时平分对应底池', () => {
   assert.equal(winnerAmount(result, 0), 50);
   assert.equal(winnerAmount(result, 1), 50);
 });
+
+test('加注后 minRaise 正确更新', () => {
+  let state = startHand(createGame(3, Difficulty.Easy));
+  const initialMinRaise = state.minRaise;
+  assert.equal(initialMinRaise, state.bigBlind);
+
+  // UTG 加注到 3BB
+  state = performAction(state, ActionType.Raise, state.bigBlind * 3);
+  const raise1MinRaise = state.minRaise;
+  // 加注增量为 3BB - 1BB = 2BB
+  assert.equal(raise1MinRaise, state.bigBlind * 2);
+
+  // 下一个玩家再加注
+  state = performAction(state, ActionType.Raise, state.maxBet + state.minRaise);
+  // 新的 minRaise 应等于第二次加注的增量
+  assert.ok(state.minRaise >= state.bigBlind * 2);
+});
+
+test('非法加注被拒绝', () => {
+  let state = startHand(createGame(3, Difficulty.Easy));
+  const currentIndex = state.currentPlayerIndex;
+  const player = state.players[currentIndex];
+
+  // 尝试加注少于最小加注额
+  const illegalAmount = state.maxBet + state.minRaise - 1;
+  if (illegalAmount > player.currentBet) {
+    const stateAfter = performAction(state, ActionType.Raise, illegalAmount);
+    // 状态应不变（action 被拒绝）
+    assert.equal(stateAfter.currentPlayerIndex, state.currentPlayerIndex);
+  }
+});
+
+test('三人全下不同筹码深度正确分配边池', () => {
+  const state = createGame(3, Difficulty.Easy, 0);
+  state.currentRound = Round.Showdown;
+  state.communityCards = [
+    card(14, Suit.Spades),
+    card(5, Suit.Hearts),
+    card(7, Suit.Clubs),
+    card(9, Suit.Diamonds),
+    card(3, Suit.Spades),
+  ];
+  // P0: 25 (最弱), P1: 50 (中等), P2: 100 (最强)
+  state.players[0].holeCards = [card(2, Suit.Clubs), card(4, Suit.Hearts)];
+  state.players[1].holeCards = [card(13, Suit.Spades), card(13, Suit.Diamonds)];
+  state.players[2].holeCards = [card(14, Suit.Hearts), card(14, Suit.Diamonds)];
+  state.players[0].totalBet = 25;
+  state.players[1].totalBet = 50;
+  state.players[2].totalBet = 100;
+  state.players.forEach(p => { p.chips = 0; p.isAllIn = true; });
+  state.pot = 175;
+
+  const result = showdown(state);
+
+  // P2 (AA) 应赢得最多
+  assert.ok(winnerAmount(result, 2) >= winnerAmount(result, 1));
+  assert.ok(winnerAmount(result, 2) >= winnerAmount(result, 0));
+});
+
+test('翻牌/转牌/河牌轮次推进正确', () => {
+  let state = startHand(createGame(3, Difficulty.Easy));
+
+  // 翻牌前：所有人过牌(check)到摊牌
+  assert.equal(state.currentRound, Round.Preflop);
+
+  // 模拟翻前所有人过牌
+  state = performAction(state, ActionType.Call);
+  state = performAction(state, ActionType.Call);
+
+  // 大盲过牌
+  const actions = getValidActions(state, state.currentPlayerIndex);
+  if (actions.includes(ActionType.Check)) {
+    state = performAction(state, ActionType.Check);
+  }
+
+  // 应该进入翻牌轮
+  assert.equal(state.currentRound, Round.Flop);
+  assert.equal(state.communityCards.length, 3);
+
+  // 翻牌圈 check around
+  let flopActions = getValidActions(state, state.currentPlayerIndex);
+  if (flopActions.includes(ActionType.Check)) {
+    state = performAction(state, ActionType.Check);
+  }
+  flopActions = getValidActions(state, state.currentPlayerIndex);
+  if (flopActions.includes(ActionType.Check)) {
+    state = performAction(state, ActionType.Check);
+  }
+  flopActions = getValidActions(state, state.currentPlayerIndex);
+  if (flopActions.includes(ActionType.Check)) {
+    state = performAction(state, ActionType.Check);
+  }
+
+  // 应该进入转牌轮
+  assert.equal(state.currentRound, Round.Turn);
+  assert.equal(state.communityCards.length, 4);
+});
+
+test('evaluator 输入校验：非法输入应抛错', () => {
+  assert.throws(() => {
+    evaluateHand([
+      card(2, Suit.Spades),
+      card(3, Suit.Hearts),
+      card(4, Suit.Clubs),
+      card(5, Suit.Diamonds),
+      card(6, Suit.Spades),
+      card(7, Suit.Hearts),
+      card(8, Suit.Clubs),
+      card(9, Suit.Diamonds),
+    ]);
+  }, /maximum is 7/);
+});

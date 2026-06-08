@@ -1,17 +1,32 @@
-import { useState, useRef, useEffect } from 'react';
+import { useState } from 'react';
 import { ActionType } from '../engine/types';
 import * as gameEngine from '../game';
 import { useGameStore } from '../store/gameStore';
+import { RaisePopup } from './RaisePopup';
 
 interface ActionPanelProps {
   playerIndex: number;
 }
 
+function actionButtonStyle(color: string): React.CSSProperties {
+  return {
+    padding: '10px 18px',
+    borderRadius: 8,
+    border: 'none',
+    background: color,
+    color: 'white',
+    fontSize: 14,
+    fontWeight: 'bold',
+    cursor: 'pointer',
+    transition: 'all 0.2s ease',
+    whiteSpace: 'nowrap',
+    minWidth: 80,
+  };
+}
+
 export function ActionPanel({ playerIndex }: ActionPanelProps) {
   const { state, playerAction } = useGameStore();
-  const [raiseAmount, setRaiseAmount] = useState(0);
   const [showRaisePopup, setShowRaisePopup] = useState(false);
-  const popupRef = useRef<HTMLDivElement>(null);
 
   if (!state) return null;
 
@@ -32,32 +47,6 @@ export function ActionPanel({ playerIndex }: ActionPanelProps) {
   const halfPotTotalBet = Math.min(maxTotalBet, Math.max(minRaise, player.currentBet + Math.floor(totalPot / 2)));
   const potTotalBet = Math.min(maxTotalBet, Math.max(minRaise, player.currentBet + totalPot));
 
-  // Close popup on outside click
-  useEffect(() => {
-    if (!showRaisePopup) return;
-    const handler = (e: MouseEvent) => {
-      if (popupRef.current && !popupRef.current.contains(e.target as Node)) {
-        setShowRaisePopup(false);
-      }
-    };
-    document.addEventListener('mousedown', handler);
-    return () => document.removeEventListener('mousedown', handler);
-  }, [showRaisePopup]);
-
-  const handleRaiseConfirm = () => {
-    const amount = Math.max(raiseAmount, minRaise);
-    playerAction(ActionType.Raise, amount);
-    setRaiseAmount(0);
-    setShowRaisePopup(false);
-  };
-
-  const handleOpenPopup = () => {
-    if (!showRaisePopup) {
-      setRaiseAmount(minRaise);
-    }
-    setShowRaisePopup(!showRaisePopup);
-  };
-
   return (
     <div
       style={{
@@ -77,127 +66,40 @@ export function ActionPanel({ playerIndex }: ActionPanelProps) {
       }}
     >
       {canFold && (
-        <button
-          onClick={() => playerAction(ActionType.Fold)}
-          style={actionButtonStyle('#c0392b')}
-        >
+        <button onClick={() => playerAction(ActionType.Fold)} style={actionButtonStyle('#c0392b')}>
           弃牌
         </button>
       )}
       {canCheck && (
-        <button
-          onClick={() => playerAction(ActionType.Check)}
-          style={actionButtonStyle('#2980b9')}
-        >
+        <button onClick={() => playerAction(ActionType.Check)} style={actionButtonStyle('#2980b9')}>
           过牌
         </button>
       )}
       {canCall && (
-        <button
-          onClick={() => playerAction(ActionType.Call)}
-          style={actionButtonStyle('#27ae60')}
-        >
+        <button onClick={() => playerAction(ActionType.Call)} style={actionButtonStyle('#27ae60')}>
           跟注 {callAmount > 0 ? `(${callAmount})` : ''}
         </button>
       )}
       {canRaise && (
         <div style={{ position: 'relative' }}>
           {showRaisePopup && (
-            <div
-              ref={popupRef}
-              style={{
-                position: 'absolute',
-                bottom: '100%',
-                left: '50%',
-                transform: 'translateX(-50%)',
-                marginBottom: 10,
-                background: 'rgba(30, 30, 50, 0.97)',
-                border: '2px solid #f39c12',
-                borderRadius: 12,
-                padding: '14px 18px',
-                display: 'flex',
-                flexDirection: 'column',
-                gap: 10,
-                minWidth: 280,
-                boxShadow: '0 6px 24px rgba(0,0,0,0.6)',
-                zIndex: 200,
+            <RaisePopup
+              minRaise={minRaise}
+              maxTotalBet={maxTotalBet}
+              halfPotTotalBet={halfPotTotalBet}
+              potTotalBet={potTotalBet}
+              onConfirm={(amount) => {
+                playerAction(ActionType.Raise, Math.max(amount, minRaise));
+                setShowRaisePopup(false);
               }}
-            >
-              {/* Quick bet buttons */}
-              <div style={{ display: 'flex', gap: 6, justifyContent: 'center' }}>
-                <button
-                  onClick={() => setRaiseAmount(halfPotTotalBet)}
-                  style={quickBetButtonStyle(raiseAmount === halfPotTotalBet)}
-                >
-                  1/2底池
-                </button>
-                <button
-                  onClick={() => setRaiseAmount(potTotalBet)}
-                  style={quickBetButtonStyle(raiseAmount === potTotalBet)}
-                >
-                  底池
-                </button>
-                <button
-                  onClick={() => setRaiseAmount(maxTotalBet)}
-                  style={quickBetButtonStyle(raiseAmount === maxTotalBet)}
-                >
-                  全押
-                </button>
-              </div>
-
-              {/* Slider */}
-              <input
-                type="range"
-                min={minRaise}
-                max={maxTotalBet}
-                step={10}
-                value={raiseAmount || minRaise}
-                onChange={(e) => setRaiseAmount(Number(e.target.value))}
-                style={sliderStyle}
-              />
-
-              {/* Amount display */}
-              <div
-                style={{
-                  textAlign: 'center',
-                  color: '#f39c12',
-                  fontSize: 20,
-                  fontWeight: 'bold',
-                }}
-              >
-                加注至 {raiseAmount || minRaise}
-              </div>
-
-              {/* Confirm button */}
-              <button
-                onClick={handleRaiseConfirm}
-                style={{
-                  padding: '10px 0',
-                  borderRadius: 8,
-                  border: 'none',
-                  background: 'linear-gradient(135deg, #f39c12, #e67e22)',
-                  color: 'white',
-                  fontSize: 16,
-                  fontWeight: 'bold',
-                  cursor: 'pointer',
-                  transition: 'all 0.2s ease',
-                  boxShadow: '0 3px 10px rgba(243, 156, 18, 0.4)',
-                }}
-              >
-                确认加注
-              </button>
-            </div>
+              onClose={() => setShowRaisePopup(false)}
+            />
           )}
           <button
-            onClick={handleOpenPopup}
+            onClick={() => setShowRaisePopup(!showRaisePopup)}
             style={{
               ...actionButtonStyle('#f39c12'),
-              ...(showRaisePopup
-                ? {
-                    boxShadow:
-                      '0 0 0 2px #f39c12, 0 0 12px rgba(243,156,18,0.5)',
-                  }
-                : {}),
+              ...(showRaisePopup ? { boxShadow: '0 0 0 2px #f39c12, 0 0 12px rgba(243,156,18,0.5)' } : {}),
             }}
           >
             加注
@@ -205,55 +107,10 @@ export function ActionPanel({ playerIndex }: ActionPanelProps) {
         </div>
       )}
       {canAllIn && (
-        <button
-          onClick={() => playerAction(ActionType.AllIn)}
-          style={actionButtonStyle('#e74c3c')}
-        >
+        <button onClick={() => playerAction(ActionType.AllIn)} style={actionButtonStyle('#e74c3c')}>
           全押 ({player.chips})
         </button>
       )}
     </div>
   );
 }
-
-function actionButtonStyle(color: string): React.CSSProperties {
-  return {
-    padding: '10px 18px',
-    borderRadius: 8,
-    border: 'none',
-    background: color,
-    color: 'white',
-    fontSize: 14,
-    fontWeight: 'bold',
-    cursor: 'pointer',
-    transition: 'all 0.2s ease',
-    whiteSpace: 'nowrap',
-    minWidth: 80,
-  };
-}
-
-function quickBetButtonStyle(active: boolean): React.CSSProperties {
-  return {
-    padding: '6px 14px',
-    borderRadius: 6,
-    border: active ? '2px solid #f39c12' : '1px solid #555',
-    background: active ? 'rgba(243, 156, 18, 0.2)' : 'transparent',
-    color: active ? '#f39c12' : '#bbb',
-    fontSize: 13,
-    fontWeight: active ? 'bold' : 'normal',
-    cursor: 'pointer',
-    transition: 'all 0.15s ease',
-    whiteSpace: 'nowrap',
-  };
-}
-
-const sliderStyle: React.CSSProperties = {
-  width: '100%',
-  height: 6,
-  WebkitAppearance: 'none',
-  appearance: 'none',
-  background: '#3a3a5a',
-  borderRadius: 3,
-  outline: 'none',
-  cursor: 'pointer',
-};

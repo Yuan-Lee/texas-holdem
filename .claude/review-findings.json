@@ -1,0 +1,62 @@
+[
+  {
+    "file": "src/game/index.ts",
+    "line": 64,
+    "summary": "Shallow copy ({...state}) leaks player mutations to previous store state",
+    "failure_scenario": "Every engine function does { ...state } but newState.players === state.players. Mutations like player.folded=true, player.chips-=amount also corrupt the old store state. If a Zustand subscriber reads store.state between get() and set() inside playerAction (e.g., via subscribe() middleware or React concurrent features), it sees partially mutated player objects with no corresponding root state update."
+  },
+  {
+    "file": "src/hooks/useGameLoop.ts",
+    "line": 41,
+    "summary": "AI decision computed from stale closure state while playerAction uses current store state",
+    "failure_scenario": "Two AI turns in rapid succession: the first AI's setTimeout captures state at t=0. At t=200ms a human action changes state (new hand). At t=1000ms the old timeout fires and calls aiEngine.makeDecision with stale state (wrong player, wrong pot, wrong community cards). The decision could be Fold on a monster hand or Call on trash, then playerAction applies it to the current store state. The effect cleanup mitigates this but does not eliminate the race — the stale timeout fires during the brief window between the cleanup registration and the new effect running."
+  },
+  {
+    "file": "src/ai/types.ts",
+    "line": 18,
+    "summary": "getValidActionsForAI duplicates engine's getValidActions with subtle differences",
+    "failure_scenario": "getValidActionsForAI (ai/types.ts:33) has a `minRaise > 0` guard for Raise that getValidActions (game/index.ts:505) lacks. getValidActions checks player.isOut but getValidActionsForAI doesn't. Any future rule change (straddle, bring-in, min-raise floor) must be updated in both locations. The AI currently shows different Raise eligibility than the human UI for the same game state — a discrepancy that will diverge further on the next rule change."
+  },
+  {
+    "file": "src/game/index.ts",
+    "line": 345,
+    "summary": "showdown is a 120-line god function with 6 distinct responsibilities",
+    "failure_scenario": "Pot collection, hand evaluation (all players), side-pot level calculation, leftover distribution, chip payout, winner struct construction are all in one function. The side-pot logic (lines 388-418) uses a multi-pass approach (activeBetLevels + leftover) whose correctness is hard to verify by inspection. A bug in the leftover distribution (lines 408-418) would silently misallocate chips at the table's final moment — the hardest place to debug."
+  },
+  {
+    "file": "src/components/GameTable.tsx",
+    "line": 164,
+    "summary": "Dealing animation timeout reset by state changes; ActionPanel not guarded by isDealing",
+    "failure_scenario": "The dealing-animation useEffect lists `state` as a dependency (line 164). If the human clicks an action button during dealing (ActionPanel is rendered at line 386 without `!isDealing` guard), `playerAction` changes state, re-fires the effect, clears and re-sets the timeout. Each click extends the dealing animation duration. In heads-up where the human is the preflop first-to-act, cards never finish animating if the human clicks repeatedly."
+  },
+  {
+    "file": "src/ai/hard.ts",
+    "line": 92,
+    "summary": "createSimulationDeck and shuffleCards duplicate engine/deck.ts with identical logic",
+    "failure_scenario": "hard.ts re-implements Fisher-Yates shuffle (lines 101-108) as shuffleCards and builds a 52-card deck from scratch in createSimulationDeck (lines 92-100). Both exist verbatim in engine/deck.ts as shuffleDeck and createDeck. If the deck structure changes (e.g., adding card metadata, changing suit/rank enums), the AI simulation silently diverges from the real deck. The Monte Carlo simulation would then evaluate impossible or incorrect hands."
+  },
+  {
+    "file": "src/components/GameTable.tsx",
+    "line": 362,
+    "summary": "getSeatRole called per render per player with O(n) traversal, no memoization",
+    "failure_scenario": "getSeatRole (gameTableUtils.ts:43-74) does players.findIndex(), players.filter(), indexOf(), and a while-loop walk for every player every render. For 6 players that's 6 full traversals per state change. Combined with the broad state dependency in useGameLoop (Finding 2), every chip-update triggers these traversals on every AI action. No crash, but 6× O(n) wasted work per state transition."
+  },
+  {
+    "file": "src/store/gameStore.ts",
+    "line": 17,
+    "summary": "isAnyAllIn declared in store interface and listed as effect dependency but never assigned",
+    "failure_scenario": "isAnyAllIn is initialized to false (line 31) and never set() anywhere. It appears in useGameLoop's useEffect dependency array (useGameLoop.ts:58). Since it never changes, it contributes nothing to the dependency-triggering logic but makes the dependency list misleading — a future developer adding isAnyAllIn assignments would expect the effect to re-fire, but would need to verify that the current dependency-listing pattern actually picks up the change."
+  },
+  {
+    "file": "src/components/ResultModal.tsx",
+    "line": 10,
+    "summary": "HAND_NAMES defined locally in ResultModal duplicates canonical copy in engine/constants.ts",
+    "failure_scenario": "The array ['高牌','一对',...,'皇家同花顺'] is declared in engine/constants.ts:35 (as const) and again in ResultModal.tsx:10 (as plain string[]). The local copy is only used as a fallback in getHandLabel when handResult.description is falsy — but scoreCards always sets description, so the local HAND_NAMES fallback is dead code. If the canonical list is ever reordered or renamed, the dead local copy becomes a stale maintenance artifact."
+  },
+  {
+    "file": "src/game/index.ts",
+    "line": 408,
+    "summary": "Side-pot leftover distribution logic is correct by empirical testing but fragile by inspection",
+    "failure_scenario": "The leftover computation (line 411) runs after the level-loop builds sidePots. If all active players bet the same amount (single level), the level-loop produces exactly one side pot and leftover should be 0. If a folded player has a bet amount between active-player levels, their surplus lands in leftover. The merge at line 413 (`sidePots[last].amount += leftover`) assumes the last pot is always the right bucket. If active players have descending totalBet (possible with fold-then-reraise), a single-level scenario could produce an empty pot list and leftover > 0, triggering the else-branch at line 416 which creates a new pot for all active players — which distributes the folded player's chips to active players who didn't cover that bet. The test suite passes, but a formal proof of correctness requires tracing the level math for every permutation of folded-vs-active totalBets."
+  }
+]

@@ -1,7 +1,8 @@
-import { ActionType, Suit } from '../engine/types';
-import type { Card, GameState, Rank } from '../engine/types';
-import { AIDecision, AILevel } from './types';
+import { ActionType } from '../engine/types';
+import type { GameState } from '../engine/types';
+import { AIDecision, AILevel, getValidActionsForAI, getRaiseTotal } from './types';
 import * as evaluator from '../engine/evaluator';
+import * as deckUtils from '../engine/deck';
 
 export const hardAI: AILevel = {
   name: '困难',
@@ -14,9 +15,11 @@ export const hardAI: AILevel = {
       return { action: ActionType.Fold };
     }
 
-    const winRate = monteCarloSimulation(state, playerId, 100);
-    const playerCards = [...player.holeCards, ...state.communityCards];
-    const handResult = evaluator.evaluateHand(playerCards);
+    const winRate = monteCarloSimulation(state, playerId, 200);
+    const hasCommunityCards = state.communityCards.length >= 3;
+    const handResult = hasCommunityCards
+      ? evaluator.evaluateHand([...player.holeCards, ...state.communityCards])
+      : { rank: 0, value: 0, description: '高牌', bestCards: player.holeCards };
 
     // Bluffing
     if (Math.random() < 0.13 && validActions.includes(ActionType.Raise)) {
@@ -57,12 +60,15 @@ function monteCarloSimulation(state: GameState, playerId: number, iterations: nu
   const communityCards = [...state.communityCards];
   const otherPlayers = state.players.filter(p => !p.folded && !p.isOut && p.id !== playerId);
   const knownCards = [...holeCards, ...communityCards];
-  const deck = createSimulationDeck(knownCards);
-  const iterationCount = Math.min(iterations, 50);
+  const deck = deckUtils.createDeck().filter(
+    card => !knownCards.some(known => known.suit === card.suit && known.rank === card.rank),
+  );
+  // Monte Carlo: 使用请求的迭代次数，但上限 200 以避免浏览器卡顿
+  const iterationCount = Math.min(iterations, 200);
   let wins = 0;
 
   for (let i = 0; i < iterationCount; i++) {
-    const shuffled = shuffleCards(deck);
+    const shuffled = deckUtils.shuffleDeck(deck);
     let deckIndex = 0;
 
     const totalCommunity = [...communityCards];
@@ -84,55 +90,4 @@ function monteCarloSimulation(state: GameState, playerId: number, iterations: nu
   }
 
   return iterationCount > 0 ? wins / iterationCount : 0;
-}
-
-function getValidActionsForAI(state: GameState): ActionType[] {
-  if (state.currentPlayerIndex === -1) return [];
-  const player = state.players[state.currentPlayerIndex];
-  if (!player || player.folded || player.isAllIn) return [];
-
-  const actions: ActionType[] = [ActionType.Fold];
-
-  if (state.maxBet === 0 || player.currentBet === state.maxBet) {
-    actions.push(ActionType.Check);
-  }
-
-  if (state.maxBet > player.currentBet && player.chips >= (state.maxBet - player.currentBet)) {
-    actions.push(ActionType.Call);
-  }
-
-  const minRaise = state.maxBet + state.minRaise - player.currentBet;
-  if (player.chips >= minRaise && minRaise > 0) {
-    actions.push(ActionType.Raise);
-  }
-
-  if (player.chips > 0) {
-    actions.push(ActionType.AllIn);
-  }
-
-  return actions;
-}
-
-function createSimulationDeck(knownCards: Card[]): Card[] {
-  const suits = [Suit.Hearts, Suit.Diamonds, Suit.Clubs, Suit.Spades];
-  const ranks: Rank[] = [2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14];
-
-  return suits.flatMap(suit =>
-    ranks
-      .map(rank => ({ suit, rank }))
-      .filter(card => !knownCards.some(known => known.suit === card.suit && known.rank === card.rank)),
-  );
-}
-
-function shuffleCards(cards: Card[]): Card[] {
-  const shuffled = [...cards];
-  for (let i = shuffled.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1));
-    [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
-  }
-  return shuffled;
-}
-
-function getRaiseTotal(state: GameState, player: GameState['players'][number], extra: number): number {
-  return Math.min(player.currentBet + player.chips, state.maxBet + state.minRaise + extra);
 }

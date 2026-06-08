@@ -9,8 +9,6 @@ interface PlayerSeatProps {
   isHuman: boolean;
   showAllCards: boolean;
   hideCards?: boolean;
-  positionLabel?: string;
-  positionCode?: string;
   markerTone?: MarkerTone;
 }
 
@@ -43,8 +41,6 @@ export function PlayerSeat({
   isHuman,
   showAllCards,
   hideCards,
-  positionLabel = '玩家位',
-  positionCode = `P${player.id + 1}`,
   markerTone = 'red',
 }: PlayerSeatProps) {
   const isInactive = player.isOut || player.folded;
@@ -103,43 +99,7 @@ export function PlayerSeat({
         )}
       </div>
 
-      <div
-        style={{
-          minWidth: 78,
-          maxWidth: 118,
-          padding: '5px 10px 6px',
-          borderRadius: 5,
-          background: 'linear-gradient(180deg, #06080a 0%, #000 100%)',
-          border: '1px solid rgba(255,255,255,0.08)',
-          boxShadow: '0 8px 14px rgba(0,0,0,0.38)',
-          textAlign: 'center',
-        }}
-      >
-        <div
-          style={{
-            color: '#fff',
-            fontSize: 14,
-            lineHeight: 1.08,
-            fontWeight: 800,
-            whiteSpace: 'nowrap',
-          }}
-        >
-          {positionLabel}
-        </div>
-        <div
-          style={{
-            color: '#f3f7fb',
-            fontSize: 12,
-            lineHeight: 1.1,
-            fontWeight: 900,
-            letterSpacing: 0,
-            marginTop: 2,
-          }}
-        >
-          {positionCode}
-        </div>
-      </div>
-
+      {/* Player name & chips */}
       <div
         style={{
           maxWidth: 132,

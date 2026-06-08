@@ -21,8 +21,10 @@ function getAIEngine(difficulty: Difficulty) {
 }
 
 export function useGameLoop() {
-  const { state, config, isAnyAllIn, isDealing } = useGameStore();
+  const { state, config, isDealing } = useGameStore();
   const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const stateRef = useRef(state);
+  stateRef.current = state;
 
   useEffect(() => {
     if (!state || !config || state.handComplete || isDealing) return;
@@ -38,8 +40,14 @@ export function useGameLoop() {
       clearTimeout(timeoutRef.current);
     }
 
+    const playerId = currentPlayer.id;
+
     timeoutRef.current = setTimeout(() => {
-      const decision = aiEngine.makeDecision(state, currentPlayer.id);
+      // 使用 ref 读取最新 state，避免闭包捕获过期 state
+      const latestState = stateRef.current;
+      if (!latestState) return;
+
+      const decision = aiEngine.makeDecision(latestState, playerId);
 
       const { playerAction } = useGameStore.getState();
 
@@ -55,5 +63,5 @@ export function useGameLoop() {
         clearTimeout(timeoutRef.current);
       }
     };
-  }, [state, config, isAnyAllIn, isDealing]);
+  }, [state, config, isDealing]);
 }

@@ -69,6 +69,9 @@ function straightCards(cards: Card[], highRank: number): Card[] {
 }
 
 function scoreCards(cards: Card[]): HandResult {
+  if (cards.length !== SCORE_CARD_COUNT) {
+    throw new Error(`scoreCards requires exactly ${SCORE_CARD_COUNT} cards, got ${cards.length}`);
+  }
   const sortedCards = sortByRankDesc(cards);
   const groups = rankGroups(cards);
   const straightHighRank = getStraightHighRank(cards);
@@ -193,6 +196,9 @@ function getCombinations<T>(items: T[], count: number): T[][] {
 }
 
 export function evaluateHand(cards: Card[]): HandResult {
+  if (cards.length > 7) {
+    throw new Error(`evaluateHand received ${cards.length} cards, maximum is 7`);
+  }
   if (cards.length === 0) {
     return {
       rank: 0,
