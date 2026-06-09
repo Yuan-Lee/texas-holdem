@@ -3,6 +3,38 @@ import type { Card, HandResult } from './types';
 const VALUE_BASE = 15;
 const SCORE_CARD_COUNT = 5;
 
+// LRU 缓存：最近使用过的牌局评估结果，上限 1024
+const evaluateCache = new Map<string, HandResult>();
+const CACHE_MAX = 1024;
+
+function cardKey(card: Card): string {
+  return `${card.rank}${card.suit[0]}`;
+}
+
+function cardsKey(cards: Card[]): string {
+  // 按 rank 排序确保相同牌组命中相同 key
+  return cards
+    .slice()
+    .sort((a, b) => a.rank - b.rank || a.suit.localeCompare(b.suit))
+    .map(cardKey)
+    .join(',');
+}
+
+function cacheGet(cards: Card[]): HandResult | undefined {
+  return evaluateCache.get(cardsKey(cards));
+}
+
+function cacheSet(cards: Card[], result: HandResult): void {
+  const key = cardsKey(cards);
+  if (evaluateCache.has(key)) return;
+  evaluateCache.set(key, result);
+  if (evaluateCache.size > CACHE_MAX) {
+    // 删除最早插入的条目（Map 保持插入顺序）
+    const firstKey = evaluateCache.keys().next().value;
+    if (firstKey !== undefined) evaluateCache.delete(firstKey);
+  }
+}
+
 function sortByRankDesc(cards: Card[]): Card[] {
   return [...cards].sort((a, b) => b.rank - a.rank);
 }
@@ -180,19 +212,49 @@ function scoreCards(cards: Card[]): HandResult {
   };
 }
 
-function getCombinations<T>(items: T[], count: number): T[][] {
-  if (count === 0) return [[]];
-  if (items.length < count) return [];
-  if (count === 1) return items.map(item => [item]);
-
-  const result: T[][] = [];
-  for (let i = 0; i <= items.length - count; i++) {
-    const combinations = getCombinations(items.slice(i + 1), count - 1);
-    for (const combination of combinations) {
-      result.push([items[i], ...combination]);
-    }
-  }
+// 预计算 C(7,5) = 21 种索引组合（按顺序生成保证稳定性）
+const COMB_7_CHOOSE_5: readonly [number, number, number, number, number][] = (() => {
+  const result: [number, number, number, number, number][] = [];
+  for (let a = 0; a < 3; a++)
+    for (let b = a + 1; b < 4; b++)
+      for (let c = b + 1; c < 5; c++)
+        for (let d = c + 1; d < 6; d++)
+          for (let e = d + 1; e < 7; e++)
+            result.push([a, b, c, d, e]);
   return result;
+})();
+
+const COMB_6_CHOOSE_5: readonly [number, number, number, number, number][] = (() => {
+  const result: [number, number, number, number, number][] = [];
+  for (let a = 0; a < 2; a++)
+    for (let b = a + 1; b < 3; b++)
+      for (let c = b + 1; c < 4; c++)
+        for (let d = c + 1; d < 5; d++)
+          for (let e = d + 1; e < 6; e++)
+            result.push([a, b, c, d, e]);
+  return result;
+})();
+
+function pick5<T>(items: T[], indices: readonly [number, number, number, number, number]): [T, T, T, T, T] {
+  return [items[indices[0]], items[indices[1]], items[indices[2]], items[indices[3]], items[indices[4]]];
+}
+
+function bestOf7(cards: Card[]): HandResult {
+  let best: HandResult | null = null;
+  for (const indices of COMB_7_CHOOSE_5) {
+    const result = scoreCards(pick5(cards, indices));
+    if (!best || result.value > best.value) best = result;
+  }
+  return best!;
+}
+
+function bestOf6(cards: Card[]): HandResult {
+  let best: HandResult | null = null;
+  for (const indices of COMB_6_CHOOSE_5) {
+    const result = scoreCards(pick5(cards, indices));
+    if (!best || result.value > best.value) best = result;
+  }
+  return best!;
 }
 
 export function evaluateHand(cards: Card[]): HandResult {
@@ -208,13 +270,20 @@ export function evaluateHand(cards: Card[]): HandResult {
     };
   }
 
+  const cached = cacheGet(cards);
+  if (cached) return cached;
+
+  let result: HandResult;
   if (cards.length <= SCORE_CARD_COUNT) {
-    return scoreCards(cards);
+    result = scoreCards(cards);
+  } else if (cards.length === 6) {
+    result = bestOf6(cards);
+  } else {
+    result = bestOf7(cards);
   }
 
-  return getCombinations(cards, SCORE_CARD_COUNT)
-    .map(scoreCards)
-    .sort((a, b) => b.value - a.value)[0];
+  cacheSet(cards, result);
+  return result;
 }
 
 export function compareHands(hands: { playerId: number; cards: Card[] }[]): { playerId: number; handResult: HandResult }[] {

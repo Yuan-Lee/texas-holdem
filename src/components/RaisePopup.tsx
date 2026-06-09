@@ -5,6 +5,7 @@ interface RaisePopupProps {
   maxTotalBet: number;
   halfPotTotalBet: number;
   potTotalBet: number;
+  currentBet: number;
   onConfirm: (amount: number) => void;
   onClose: () => void;
 }
@@ -35,7 +36,7 @@ function quickBetButtonStyle(active: boolean): React.CSSProperties {
   };
 }
 
-export function RaisePopup({ minRaise, maxTotalBet, halfPotTotalBet, potTotalBet, onConfirm, onClose }: RaisePopupProps) {
+export function RaisePopup({ minRaise, maxTotalBet, halfPotTotalBet, potTotalBet, currentBet, onConfirm, onClose }: RaisePopupProps) {
   const [raiseAmount, setRaiseAmount] = useState(minRaise);
   const popupRef = useRef<HTMLDivElement>(null);
 
@@ -48,6 +49,8 @@ export function RaisePopup({ minRaise, maxTotalBet, halfPotTotalBet, potTotalBet
     document.addEventListener('mousedown', handler);
     return () => document.removeEventListener('mousedown', handler);
   }, [onClose]);
+
+  const additionalChips = raiseAmount - currentBet;
 
   return (
     <div
@@ -110,6 +113,9 @@ export function RaisePopup({ minRaise, maxTotalBet, halfPotTotalBet, potTotalBet
         }}
       >
         加注至 {raiseAmount}
+      </div>
+      <div style={{ textAlign: 'center', color: '#95a5a6', fontSize: 13 }}>
+        需追加 {additionalChips} 筹码
       </div>
 
       <button

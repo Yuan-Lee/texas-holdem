@@ -8,7 +8,8 @@ export const hardAI: AILevel = {
   name: '困难',
   description: '高级策略，蒙特卡洛模拟',
   makeDecision: (state: GameState, playerId: number): AIDecision => {
-    const player = state.players.find(p => p.id === playerId)!;
+    const player = state.players[playerId];
+    if (!player) return { action: ActionType.Fold };
     const validActions = getValidActionsForAI(state);
 
     if (validActions.length === 0) {
@@ -55,7 +56,8 @@ export const hardAI: AILevel = {
 };
 
 function monteCarloSimulation(state: GameState, playerId: number, iterations: number): number {
-  const player = state.players.find(p => p.id === playerId)!;
+  const player = state.players[playerId];
+  if (!player) return 0;
   const holeCards = [...player.holeCards];
   const communityCards = [...state.communityCards];
   const otherPlayers = state.players.filter(p => !p.folded && !p.isOut && p.id !== playerId);
@@ -63,11 +65,16 @@ function monteCarloSimulation(state: GameState, playerId: number, iterations: nu
   const deck = deckUtils.createDeck().filter(
     card => !knownCards.some(known => known.suit === card.suit && known.rank === card.rank),
   );
-  // Monte Carlo: 使用请求的迭代次数，但上限 200 以避免浏览器卡顿
-  const iterationCount = Math.min(iterations, 200);
+  // 时间预算：最多 50ms，防止卡主线程；最大 200 次
+  const maxIterations = Math.min(iterations, 200);
+  const timeBudgetMs = 50;
+  const startTime = performance.now();
   let wins = 0;
+  let iterationsRun = 0;
 
-  for (let i = 0; i < iterationCount; i++) {
+  for (let i = 0; i < maxIterations; i++) {
+    if (performance.now() - startTime > timeBudgetMs) break;
+
     const shuffled = deckUtils.shuffleDeck(deck);
     let deckIndex = 0;
 
@@ -87,7 +94,8 @@ function monteCarloSimulation(state: GameState, playerId: number, iterations: nu
     }
 
     if (playerResult.value >= bestOpponentValue) wins++;
+    iterationsRun = i + 1;
   }
 
-  return iterationCount > 0 ? wins / iterationCount : 0;
+  return iterationsRun > 0 ? wins / iterationsRun : 0;
 }

@@ -7,7 +7,8 @@ export const mediumAI: AILevel = {
   name: '中等',
   description: '考虑手牌强度和底池赔率',
   makeDecision: (state: GameState, playerId: number): AIDecision => {
-    const player = state.players.find(p => p.id === playerId)!;
+    const player = state.players[playerId];
+    if (!player) return { action: ActionType.Fold };
     const validActions = getValidActionsForAI(state);
 
     if (validActions.length === 0) {

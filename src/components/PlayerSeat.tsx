@@ -9,6 +9,7 @@ interface PlayerSeatProps {
   isHuman: boolean;
   showAllCards: boolean;
   hideCards?: boolean;
+  isThinking?: boolean;
   markerTone?: MarkerTone;
 }
 
@@ -41,6 +42,7 @@ export function PlayerSeat({
   isHuman,
   showAllCards,
   hideCards,
+  isThinking,
   markerTone = 'red',
 }: PlayerSeatProps) {
   const isInactive = player.isOut || player.folded;
@@ -148,6 +150,11 @@ export function PlayerSeat({
               fontWeight: 800,
             }}
           >
+            {isThinking && (
+              <span style={{ color: '#4fc3f7', animation: 'pulse 1s ease-in-out infinite' }}>
+                思考中...
+              </span>
+            )}
             {player.currentBet > 0 && <span>注 {player.currentBet}</span>}
             {player.isAllIn && <span style={{ color: '#ff7a7a' }}>ALL IN</span>}
             {player.folded && <span style={{ color: '#aeb9c3' }}>弃牌</span>}

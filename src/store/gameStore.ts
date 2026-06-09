@@ -1,8 +1,8 @@
 import { create } from 'zustand';
-import type { GameState } from '../engine/types';
+import type { GameState, Winner } from '../engine/types';
 import { ActionType, Difficulty } from '../engine/types';
 import * as gameEngine from '../game';
-import { playDeal, playShuffle, playActionSound, playWin, playLose, playButtonClick } from '../utils/sound';
+import { playDeal, playShuffle, playActionSound, playWin, playLose } from '../utils/sound';
 
 interface GameConfig {
   playerCount: number;
@@ -11,11 +11,22 @@ interface GameConfig {
   playerName: string;
 }
 
+export interface HandRecord {
+  handNumber: number;
+  winners: { name: string; amount: number }[];
+  pot: number;
+  communityCards: string;
+  playerProfit: Record<number, number>; // playerId → chip change
+}
+
 interface GameStore {
   state: GameState | null;
   config: GameConfig | null;
   isDealing: boolean;
   gameOver: boolean;
+  handCount: number;
+  blindLevel: number;
+  handHistory: HandRecord[];
   startGame: (config: GameConfig) => void;
   playerAction: (action: ActionType, amount?: number) => void;
   setState: (state: GameState) => void;
@@ -24,24 +35,39 @@ interface GameStore {
   endGame: () => void;
 }
 
+const BLIND_LEVELS = [
+  { sb: 10, bb: 20 },
+  { sb: 15, bb: 30 },
+  { sb: 25, bb: 50 },
+  { sb: 40, bb: 80 },
+  { sb: 60, bb: 120 },
+  { sb: 100, bb: 200 },
+  { sb: 150, bb: 300 },
+  { sb: 250, bb: 500 },
+];
+
+const HANDS_PER_LEVEL = 6;
+
 export const useGameStore = create<GameStore>((set, get) => ({
   state: null,
   config: null,
   isDealing: false,
   gameOver: false,
+  handCount: 0,
+  blindLevel: 0,
+  handHistory: [],
 
   startGame: (config: GameConfig) => {
     let state = gameEngine.createGame(config.playerCount, config.difficulty, config.startingChips, config.playerName);
     state = gameEngine.startHand(state);
     playShuffle();
-    set({ state, config, gameOver: false, isDealing: true });
+    set({ state, config, gameOver: false, isDealing: true, handCount: 0, blindLevel: 0, handHistory: [] });
   },
 
   playerAction: (action: ActionType, amount?: number) => {
     const { state } = get();
     if (!state) return;
     playActionSound(action);
-    playButtonClick();
     const newState = gameEngine.performAction(state, action, amount);
     const winners = newState.winners;
     if (winners && winners.length > 0) {
@@ -56,53 +82,104 @@ export const useGameStore = create<GameStore>((set, get) => ({
   },
 
   nextHand: () => {
-    const { state, config } = get();
+    const { state, config, handCount, blindLevel } = get();
     if (!state || !config) return;
 
-    // 深度克隆后修改，避免污染前一个 store state
-    const cloned = {
-      ...state,
-      players: state.players.map(p => ({
-        ...p,
-        holeCards: [...p.holeCards],
-        handRank: p.handRank ? { ...p.handRank, bestCards: [...p.handRank.bestCards] } : undefined,
-      })),
-    };
+    // Record hand history
+    const prevChips = state.players.map(p => p.chips);
 
-    // 标记筹码为 0 的玩家为出局
-    for (const player of cloned.players) {
-      if (player.chips <= 0 && player.id !== 0) {
-        player.isOut = true;
-      }
-    }
+    // Mark out players and check game over
+    const players = state.players.map(p =>
+      p.chips <= 0 && p.id !== 0 ? { ...p, isOut: true } : p
+    );
 
-    for (const player of cloned.players) {
-      player.holeCards = [];
-      player.currentBet = 0;
-      player.folded = false;
-      player.isAllIn = false;
-      player.handRank = undefined;
-    }
-
-    // 检查人类玩家是否破产
-    const humanPlayer = cloned.players[0];
+    const humanPlayer = players[0];
     if (humanPlayer.chips <= 0) {
       playLose();
-      set({ gameOver: true, state: { ...cloned, handComplete: true } });
+      const record: HandRecord = {
+        handNumber: handCount + 1,
+        winners: state.winners.map(w => ({
+          name: state.players.find(p => p.id === w.playerId)?.name ?? `P${w.playerId}`,
+          amount: w.amount,
+        })),
+        pot: state.pot,
+        communityCards: state.communityCards.map(c => `${c.rank}${c.suit[0]}`).join(' '),
+        playerProfit: {},
+      };
+      for (const p of state.players) {
+        record.playerProfit[p.id] = p.chips - prevChips[p.id];
+      }
+      set({
+        gameOver: true,
+        state: { ...state, players, handComplete: true },
+        handHistory: [...get().handHistory, record],
+      });
       return;
     }
 
-    // 检查是否只剩一个非出局玩家
-    const remaining = cloned.players.filter(p => !p.isOut);
+    const remaining = players.filter(p => !p.isOut);
     if (remaining.length <= 1) {
       playWin();
-      set({ gameOver: true, state: { ...cloned, handComplete: true } });
+      const record: HandRecord = {
+        handNumber: handCount + 1,
+        winners: state.winners.map(w => ({
+          name: state.players.find(p => p.id === w.playerId)?.name ?? `P${w.playerId}`,
+          amount: w.amount,
+        })),
+        pot: state.pot,
+        communityCards: state.communityCards.map(c => `${c.rank}${c.suit[0]}`).join(' '),
+        playerProfit: {},
+      };
+      for (const p of state.players) {
+        record.playerProfit[p.id] = p.chips - prevChips[p.id];
+      }
+      set({
+        gameOver: true,
+        state: { ...state, players, handComplete: true },
+        handHistory: [...get().handHistory, record],
+      });
       return;
     }
 
-    const finalState = gameEngine.startHand(cloned);
+    // Record this hand in history
+    const record: HandRecord = {
+      handNumber: handCount + 1,
+      winners: state.winners.map(w => ({
+        name: state.players.find(p => p.id === w.playerId)?.name ?? `P${w.playerId}`,
+        amount: w.amount,
+      })),
+      pot: state.pot,
+      communityCards: state.communityCards.map(c => `${c.rank}${c.suit[0]}`).join(' '),
+      playerProfit: {},
+    };
+    for (const p of state.players) {
+      record.playerProfit[p.id] = p.chips - prevChips[p.id];
+    }
+
+    const newHandCount = handCount + 1;
+    const newBlindLevel = Math.min(
+      Math.floor(newHandCount / HANDS_PER_LEVEL),
+      BLIND_LEVELS.length - 1,
+    );
+
+    const level = BLIND_LEVELS[newBlindLevel];
+    const preppedState = {
+      ...state,
+      players,
+      smallBlind: level.sb,
+      bigBlind: level.bb,
+    };
+    const finalState = gameEngine.startHand(preppedState);
+
     playShuffle();
-    set({ state: finalState, gameOver: false, isDealing: true });
+    set({
+      state: finalState,
+      gameOver: false,
+      isDealing: true,
+      handCount: newHandCount,
+      blindLevel: newBlindLevel,
+      handHistory: [...get().handHistory, record],
+    });
   },
 
   completeDealing: () => {
@@ -111,6 +188,6 @@ export const useGameStore = create<GameStore>((set, get) => ({
   },
 
   endGame: () => {
-    set({ state: null, gameOver: false, config: null });
+    set({ state: null, gameOver: false, config: null, handCount: 0, blindLevel: 0 });
   },
 }));

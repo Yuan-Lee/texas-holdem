@@ -21,29 +21,37 @@ function getAIEngine(difficulty: Difficulty) {
 }
 
 export function useGameLoop() {
-  const { state, config, isDealing } = useGameStore();
+  const state = useGameStore((s) => s.state);
+  const config = useGameStore((s) => s.config);
+  const isDealing = useGameStore((s) => s.isDealing);
   const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const stateRef = useRef(state);
   stateRef.current = state;
 
+  // Derive whether it's an AI turn — used as a guard to avoid
+  // setting up timers when no AI action is needed.
+  const isAITurn = !!(
+    state &&
+    config &&
+    !state.handComplete &&
+    !isDealing &&
+    state.players[state.currentPlayerIndex]?.isAI &&
+    !state.players[state.currentPlayerIndex].folded &&
+    !state.players[state.currentPlayerIndex].isAllIn &&
+    !state.players[state.currentPlayerIndex].isOut
+  );
+
   useEffect(() => {
-    if (!state || !config || state.handComplete || isDealing) return;
+    if (!isAITurn) return;
 
-    const currentPlayer = state.players[state.currentPlayerIndex];
-    if (!currentPlayer || !currentPlayer.isAI || currentPlayer.folded || currentPlayer.isAllIn || currentPlayer.isOut) {
-      return;
-    }
-
-    const aiEngine = getAIEngine(config.difficulty);
+    const aiEngine = getAIEngine(config!.difficulty);
+    const playerId = state!.players[state!.currentPlayerIndex].id;
 
     if (timeoutRef.current) {
       clearTimeout(timeoutRef.current);
     }
 
-    const playerId = currentPlayer.id;
-
     timeoutRef.current = setTimeout(() => {
-      // 使用 ref 读取最新 state，避免闭包捕获过期 state
       const latestState = stateRef.current;
       if (!latestState) return;
 
@@ -63,5 +71,5 @@ export function useGameLoop() {
         clearTimeout(timeoutRef.current);
       }
     };
-  }, [state, config, isDealing]);
+  }, [isAITurn, state?.currentPlayerIndex, config?.difficulty]);
 }

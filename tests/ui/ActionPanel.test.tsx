@@ -23,6 +23,11 @@ vi.mock('../../src/game', () => ({
   getValidActions: () => testValidActions,
 }));
 
+/** Helper: assert that mockPlayerAction was called with a specific action (ignore optional amount) */
+function expectAction(action: ActionType) {
+  expect(mockPlayerAction).toHaveBeenCalledWith(action, undefined);
+}
+
 function defaultStoreState() {
   return {
     players: [
@@ -48,63 +53,63 @@ describe('ActionPanel', () => {
   it('renders fold button when Fold is valid', () => {
     testValidActions = [ActionType.Fold, ActionType.Call];
     render(<ActionPanel playerIndex={0} />);
-    expect(screen.getByText('弃牌')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /弃牌/ })).toBeInTheDocument();
   });
 
   it('renders check button when Check is valid', () => {
     testValidActions = [ActionType.Check];
     render(<ActionPanel playerIndex={0} />);
-    expect(screen.getByText('过牌')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /过牌/ })).toBeInTheDocument();
   });
 
   it('renders call button with amount when Call is valid', () => {
     testValidActions = [ActionType.Call];
     render(<ActionPanel playerIndex={0} />);
-    expect(screen.getByText(/跟注/)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /跟注/ })).toBeInTheDocument();
   });
 
   it('renders raise button when Raise is valid', () => {
     testValidActions = [ActionType.Raise];
     render(<ActionPanel playerIndex={0} />);
-    expect(screen.getByText('加注')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /加注/ })).toBeInTheDocument();
   });
 
   it('renders all-in button when AllIn is valid', () => {
     testValidActions = [ActionType.AllIn];
     render(<ActionPanel playerIndex={0} />);
-    expect(screen.getByText(/全押/)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /全押/ })).toBeInTheDocument();
   });
 
   it('calls playerAction with Fold when fold button clicked', async () => {
     const user = userEvent.setup();
     testValidActions = [ActionType.Fold, ActionType.Check];
     render(<ActionPanel playerIndex={0} />);
-    await user.click(screen.getByText('弃牌'));
-    expect(mockPlayerAction).toHaveBeenCalledWith(ActionType.Fold);
+    await user.click(screen.getByRole('button', { name: /弃牌/ }));
+    expectAction(ActionType.Fold);
   });
 
   it('calls playerAction with Check when check button clicked', async () => {
     const user = userEvent.setup();
     testValidActions = [ActionType.Check];
     render(<ActionPanel playerIndex={0} />);
-    await user.click(screen.getByText('过牌'));
-    expect(mockPlayerAction).toHaveBeenCalledWith(ActionType.Check);
+    await user.click(screen.getByRole('button', { name: /过牌/ }));
+    expectAction(ActionType.Check);
   });
 
   it('calls playerAction with Call when call button clicked', async () => {
     const user = userEvent.setup();
     testValidActions = [ActionType.Call];
     render(<ActionPanel playerIndex={0} />);
-    await user.click(screen.getByText(/跟注/));
-    expect(mockPlayerAction).toHaveBeenCalledWith(ActionType.Call);
+    await user.click(screen.getByRole('button', { name: /跟注/ }));
+    expectAction(ActionType.Call);
   });
 
   it('calls playerAction with AllIn when all-in button clicked', async () => {
     const user = userEvent.setup();
     testValidActions = [ActionType.AllIn];
     render(<ActionPanel playerIndex={0} />);
-    await user.click(screen.getByText(/全押/));
-    expect(mockPlayerAction).toHaveBeenCalledWith(ActionType.AllIn);
+    await user.click(screen.getByRole('button', { name: /全押/ }));
+    expectAction(ActionType.AllIn);
   });
 
   it('shows call amount when amount > 0', () => {
@@ -121,14 +126,14 @@ describe('ActionPanel', () => {
     };
     testValidActions = [ActionType.Call];
     render(<ActionPanel playerIndex={0} />);
-    expect(screen.getByText(/40/)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /40/ })).toBeInTheDocument();
   });
 
   it('shows raise popup when raise button clicked', async () => {
     const user = userEvent.setup();
     testValidActions = [ActionType.Raise];
     render(<ActionPanel playerIndex={0} />);
-    await user.click(screen.getByText('加注'));
+    await user.click(screen.getByRole('button', { name: /加注/ }));
     expect(screen.getByText('确认加注')).toBeInTheDocument();
   });
 
@@ -136,7 +141,7 @@ describe('ActionPanel', () => {
     const user = userEvent.setup();
     testValidActions = [ActionType.Raise];
     render(<ActionPanel playerIndex={0} />);
-    await user.click(screen.getByText('加注'));
+    await user.click(screen.getByRole('button', { name: /加注/ }));
     expect(screen.getByText('1/2底池')).toBeInTheDocument();
     expect(screen.getByText('底池')).toBeInTheDocument();
     expect(screen.getByText('全押')).toBeInTheDocument();
@@ -145,10 +150,10 @@ describe('ActionPanel', () => {
   it('shows all buttons when multiple actions valid', () => {
     testValidActions = [ActionType.Fold, ActionType.Call, ActionType.Raise, ActionType.AllIn];
     render(<ActionPanel playerIndex={0} />);
-    expect(screen.getByText('弃牌')).toBeInTheDocument();
-    expect(screen.getByText(/跟注/)).toBeInTheDocument();
-    expect(screen.getByText('加注')).toBeInTheDocument();
-    expect(screen.getByText(/全押/)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /弃牌/ })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /跟注/ })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /加注/ })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /全押/ })).toBeInTheDocument();
   });
 
   it('returns null when player folded', () => {

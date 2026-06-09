@@ -42,7 +42,7 @@ describe('ResultModal', () => {
   it('shows the winner name and amount', () => {
     const winners = [makeWinner(0, 60)];
     render(<ResultModal winners={winners} players={players} onNewHand={onNewHand} />);
-    expect(screen.getByText('Human')).toBeInTheDocument();
+    expect(screen.getByText(/Human/)).toBeInTheDocument();
     expect(screen.getByText(/60/)).toBeInTheDocument();
   });
 
@@ -58,21 +58,22 @@ describe('ResultModal', () => {
       makeWinner(1, 30, { rank: 1, value: 1000, description: '一对', bestCards: [] }),
     ];
     render(<ResultModal winners={winners} players={players} onNewHand={onNewHand} />);
-    expect(screen.getByText('Human')).toBeInTheDocument();
-    expect(screen.getByText('AI-1')).toBeInTheDocument();
+    expect(screen.getByText(/Human/)).toBeInTheDocument();
+    expect(screen.getByText(/AI-1/)).toBeInTheDocument();
     // Each winner has amount 30
     const amounts = screen.getAllByText(/30/);
     expect(amounts.length).toBeGreaterThanOrEqual(2);
   });
 
-  it('does not show hand rank when there are multiple winners (split pot)', () => {
+  it('shows hand rank even with multiple winners (split pot)', () => {
     const winners = [
       makeWinner(0, 30),
       makeWinner(1, 30),
     ];
     render(<ResultModal winners={winners} players={players} onNewHand={onNewHand} />);
-    // Hand rank should only show for single winner
-    expect(screen.queryByText('一对')).not.toBeInTheDocument();
+    // New behavior: hand rank is now shown for all winners
+    const labels = screen.getAllByText('一对');
+    expect(labels.length).toBe(2);
   });
 
   it('renders "下一局" button', () => {
@@ -102,12 +103,24 @@ describe('ResultModal', () => {
     expect(screen.getByText(/玩家 100/)).toBeInTheDocument();
   });
 
-  it('shows empty line for hand rank when handResult is missing', () => {
+  it('shows other players hands when they have handRank', () => {
+    const hand: HandResult = { rank: 2, value: 2000, description: '两对', bestCards: [] };
+    const losersWithHands = [
+      makePlayer(1, 'AI-1'),
+      makePlayer(2, 'AI-2'),
+    ];
+    losersWithHands[0].handRank = hand;
+    losersWithHands[1].handRank = hand;
+    const allPlayers = [players[0], ...losersWithHands];
+    const winners = [makeWinner(0, 100)];
+    render(<ResultModal winners={winners} players={allPlayers} onNewHand={onNewHand} />);
+    expect(screen.getByText(/其他玩家手牌/)).toBeInTheDocument();
+  });
+
+  it('handles missing handResult without crashing', () => {
     const winnerWithUndefined: Winner = { playerId: 0, amount: 60, handResult: undefined as unknown as HandResult };
     render(<ResultModal winners={[winnerWithUndefined]} players={players} onNewHand={onNewHand} />);
-    // The hand rank section should be empty or not rendered
-    // It relies on getHandLabel returning '' for undefined
-    const handRankContainer = screen.getByText('Human').closest('div')?.nextElementSibling?.nextElementSibling;
-    // Should not crash regardless
+    // Should render without crashing — hand rank label will be empty, bestCards section skipped
+    expect(screen.getByText(/Human/)).toBeInTheDocument();
   });
 });

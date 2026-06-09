@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import { useGameStore } from '../store/gameStore';
 import { useGameLoop } from '../hooks/useGameLoop';
 import { PlayerSeat } from './PlayerSeat';
@@ -149,6 +149,82 @@ function DealingAnimation({ state, isDealing }: { state: NonNullable<ReturnType<
             </div>
           );
         })
+      )}
+    </>
+  );
+}
+
+function BlindsDisplay() {
+  const blindLevel = useGameStore(s => s.blindLevel);
+  const state = useGameStore(s => s.state);
+  if (!state) return null;
+  return (
+    <div style={{ fontSize: 11, color: 'rgba(238,255,249,0.55)', fontWeight: 600, textAlign: 'center', marginTop: 2 }}>
+      盲注 {state.smallBlind}/{state.bigBlind}
+      {blindLevel > 0 && <span> · Lv{blindLevel + 1}</span>}
+    </div>
+  );
+}
+
+function StatsPanel() {
+  const handHistory = useGameStore(s => s.handHistory);
+  const state = useGameStore(s => s.state);
+  const [open, setOpen] = useState(false);
+  if (!state || handHistory.length === 0) return null;
+
+  const humanProfit = handHistory.reduce((sum, h) => sum + (h.playerProfit[0] ?? 0), 0);
+  const wins = handHistory.filter(h => h.winners.some(w => w.name === state.players[0]?.name)).length;
+  const recent = handHistory.slice(-10).reverse();
+
+  return (
+    <>
+      <div
+        onClick={() => setOpen(!open)}
+        style={{
+          position: 'fixed', top: 16, left: 16, zIndex: 150,
+          width: 36, height: 36, borderRadius: '50%',
+          border: '2px solid #3498db', background: 'rgba(44, 62, 80, 0.85)',
+          color: '#3498db', fontSize: 16, cursor: 'pointer',
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          transition: 'all 0.2s ease', boxShadow: '0 2px 8px rgba(0,0,0,0.3)',
+          userSelect: 'none',
+        }}
+      >
+        📊
+      </div>
+      {open && (
+        <div
+          style={{
+            position: 'fixed', top: 58, left: 16, zIndex: 160,
+            background: 'rgba(30, 30, 50, 0.97)', border: '2px solid #3498db',
+            borderRadius: 12, padding: 14, minWidth: 260, maxHeight: 360,
+            overflowY: 'auto', boxShadow: '0 6px 24px rgba(0,0,0,0.6)',
+          }}
+        >
+          <div style={{ color: '#ecf0f1', fontSize: 14, fontWeight: 'bold', marginBottom: 8 }}>
+            统计概览
+          </div>
+          <div style={{ fontSize: 12, color: '#95a5a6', marginBottom: 8, lineHeight: 1.6 }}>
+            总局数: {handHistory.length}<br />
+            胜局: {wins} ({handHistory.length > 0 ? Math.round(wins / handHistory.length * 100) : 0}%)<br />
+            总盈亏: <span style={{ color: humanProfit >= 0 ? '#2ecc71' : '#e74c3c', fontWeight: 'bold' }}>
+              {humanProfit >= 0 ? '+' : ''}{humanProfit}
+            </span>
+          </div>
+          <div style={{ borderTop: '1px solid rgba(255,255,255,0.08)', paddingTop: 8, marginTop: 4 }}>
+            <div style={{ color: '#95a5a6', fontSize: 11, fontWeight: 'bold', marginBottom: 4 }}>
+              最近牌局
+            </div>
+            {recent.map((h, i) => (
+              <div key={h.handNumber} style={{ fontSize: 11, color: '#bdc3c7', padding: '2px 0', display: 'flex', justifyContent: 'space-between' }}>
+                <span>#{h.handNumber} 底池{h.pot}</span>
+                <span style={{ color: (h.playerProfit[0] ?? 0) >= 0 ? '#2ecc71' : '#e74c3c' }}>
+                  {(h.playerProfit[0] ?? 0) >= 0 ? '+' : ''}{h.playerProfit[0] ?? 0}
+                </span>
+              </div>
+            ))}
+          </div>
+        </div>
       )}
     </>
   );
@@ -320,6 +396,7 @@ export function GameTable() {
               >
                 底池 {state.pot}
               </div>
+              <BlindsDisplay />
               {state.currentRound !== Round.Showdown && (
                 <div style={{ fontSize: 12, color: 'rgba(238,255,249,0.78)', marginTop: 4, fontWeight: 700 }}>
                   {getRoundName(state.currentRound)}
@@ -349,6 +426,7 @@ export function GameTable() {
               <PlayerSeat
                 player={player}
                 isCurrentPlayer={state.currentPlayerIndex === i}
+                isThinking={state.currentPlayerIndex === i && player.isAI && !state.handComplete && !isDealing}
                 isHuman={i === 0}
                 showAllCards={showAllCards}
                 hideCards={isDealing}
@@ -376,6 +454,7 @@ export function GameTable() {
 
       <SoundToggle />
       <HandRankHelp />
+      <StatsPanel />
     </div>
   );
 }

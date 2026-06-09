@@ -7,7 +7,8 @@ export const easyAI: AILevel = {
   name: '简单',
   description: '基础策略，随机决策',
   makeDecision: (state: GameState, playerId: number): AIDecision => {
-    const player = state.players.find(p => p.id === playerId)!;
+    const player = state.players[playerId];
+    if (!player) return { action: ActionType.Fold };
     const validActions = getValidActionsForAI(state);
 
     if (validActions.length === 0) {

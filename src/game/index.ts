@@ -158,7 +158,7 @@ export function startHand(state: GameState): GameState {
 
   newState.currentPlayerIndex = getNextActivePlayer(newState, bbIndex);
   if (newState.currentPlayerIndex === -1) {
-    return advanceRound(newState);
+    return advanceRoundInternal(newState);
   }
   newState.firstToActIndex = newState.currentPlayerIndex;
 
@@ -236,7 +236,8 @@ export function performAction(state: GameState, action: ActionType, amount: numb
   newState.currentPlayerIndex = getNextActivePlayer(newState, newState.currentPlayerIndex);
 
   if (newState.currentPlayerIndex === -1 || isRoundComplete(newState)) {
-    return advanceRound(newState);
+    // newState already cloned; skip re-cloning in advanceRound/showdown
+    return advanceRoundInternal(newState);
   }
 
   return newState;
@@ -262,12 +263,9 @@ export function isRoundComplete(state: GameState): boolean {
   if (state.lastActionPlayerIndex === -1) return false;
 
   // 检查是否行动已经绕完一圈回到起始玩家
-  // 当前 currentPlayerIndex 是下一个要行动的玩家
-  // 如果下一个玩家等于本轮第一个行动的玩家，说明所有人都行动了一轮
   const nextToAct = state.currentPlayerIndex;
 
   // 检查 firstToActIndex 玩家是否仍然活跃
-  // 如果该玩家在本轮中弃牌/AllIn/出局，则永远无法绕回他
   const firstToActPlayer = state.players[state.firstToActIndex];
   const firstToActActive = firstToActPlayer && !firstToActPlayer.folded && !firstToActPlayer.isAllIn && !firstToActPlayer.isOut;
 
@@ -281,8 +279,12 @@ export function isRoundComplete(state: GameState): boolean {
   return nextToAct === effectiveFirst;
 }
 
-export function advanceRound(state: GameState): GameState {
-  const newState = deepCloneState(state);
+/**
+ * Internal advanceRound that operates on a state already cloned by the caller.
+ * Skips the redundant deepCloneState.
+ */
+function advanceRoundInternal(state: GameState): GameState {
+  const newState = state;
 
   const nextRoundMap: Record<Round, Round> = {
     [Round.Preflop]: Round.Flop,
@@ -294,23 +296,26 @@ export function advanceRound(state: GameState): GameState {
 
   while (true) {
     if (newState.currentRound === Round.Showdown) {
-      return showdown(newState);
+      return showdownInternal(newState);
     }
 
     // 推进到下一个 round
     newState.currentRound = nextRoundMap[newState.currentRound];
 
     if (newState.currentRound === Round.Showdown) {
-      return showdown(newState);
+      return showdownInternal(newState);
     }
+
+    // 烧牌（标准规则：每轮发公共牌前烧一张）
+    const burnResult = deckUtils.dealCards(newState.deck, 1);
 
     // 发公共牌
     if (newState.currentRound === Round.Flop) {
-      const { cards, remainingDeck } = deckUtils.dealCards(newState.deck, 3);
+      const { cards, remainingDeck } = deckUtils.dealCards(burnResult.remainingDeck, 3);
       newState.communityCards = cards;
       newState.deck = remainingDeck;
     } else if (newState.currentRound === Round.Turn || newState.currentRound === Round.River) {
-      const { cards, remainingDeck } = deckUtils.dealCards(newState.deck, 1);
+      const { cards, remainingDeck } = deckUtils.dealCards(burnResult.remainingDeck, 1);
       newState.communityCards = [...newState.communityCards, ...cards];
       newState.deck = remainingDeck;
     }
@@ -328,7 +333,7 @@ export function advanceRound(state: GameState): GameState {
     // 如果只剩一个未弃牌的玩家，直接进入 showdown
     const nonFolded = newState.players.filter(p => !p.folded && !p.isOut);
     if (nonFolded.length <= 1) {
-      return showdown(newState);
+      return showdownInternal(newState);
     }
 
     // 检查是否所有未弃牌玩家都已 all-in
@@ -354,8 +359,16 @@ export function advanceRound(state: GameState): GameState {
   return newState;
 }
 
-export function showdown(state: GameState): GameState {
-  const newState = deepCloneState(state);
+/** Public advanceRound that clones first (for external callers like startHand) */
+export function advanceRound(state: GameState): GameState {
+  return advanceRoundInternal(deepCloneState(state));
+}
+
+/**
+ * Internal showdown that operates on a state already cloned by the caller.
+ */
+function showdownInternal(state: GameState): GameState {
+  const newState = state;
 
   // 收集剩余的赌注到 pot 和 totalBet
   for (const player of newState.players) {
@@ -433,10 +446,13 @@ export function showdown(state: GameState): GameState {
   const totalWinners = new Map<number, { amount: number; handResult: HandResult }>();
 
   for (const sidePot of sidePots) {
-    const eligibleResults = sidePot.eligiblePlayerIds.map(id => ({
-      playerId: id,
-      handResult: activePlayers.find(p => p.id === id)!.handRank!,
-    }));
+    const eligibleResults = sidePot.eligiblePlayerIds.map(id => {
+      const player = activePlayers.find(p => p.id === id);
+      if (!player?.handRank) return null;
+      return { playerId: id, handResult: player.handRank };
+    }).filter((r): r is { playerId: number; handResult: HandResult } => r !== null);
+
+    if (eligibleResults.length === 0) continue;
 
     eligibleResults.sort((a, b) => b.handResult.value - a.handResult.value);
 
@@ -448,7 +464,7 @@ export function showdown(state: GameState): GameState {
 
     for (let i = 0; i < potWinners.length; i++) {
       const w = potWinners[i];
-      const extra = i < remainder ? 1 : 0; // 余数分摊给前 remainder 个赢家
+      const extra = i < remainder ? 1 : 0;
       const existing = totalWinners.get(w.playerId) || { amount: 0, handResult: w.handResult };
       totalWinners.set(w.playerId, {
         amount: existing.amount + share + extra,
@@ -459,8 +475,8 @@ export function showdown(state: GameState): GameState {
 
   // 分配筹码给赢家
   for (const [playerId, { amount }] of totalWinners) {
-    const player = newState.players.find(p => p.id === playerId)!;
-    player.chips += amount;
+    const player = newState.players.find(p => p.id === playerId);
+    if (player) player.chips += amount;
   }
 
   newState.winners = [...totalWinners.entries()].map(([playerId, { amount, handResult }]) => ({
@@ -474,6 +490,11 @@ export function showdown(state: GameState): GameState {
   newState.currentRound = Round.Showdown;
 
   return newState;
+}
+
+/** Public showdown that clones first (for external callers) */
+export function showdown(state: GameState): GameState {
+  return showdownInternal(deepCloneState(state));
 }
 
 export function getNextActivePlayer(state: GameState, currentIndex: number): number {

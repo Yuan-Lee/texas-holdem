@@ -29,16 +29,3 @@ export function dealCards(deck: Card[], count: number): { cards: Card[]; remaini
   const remainingDeck = deck.slice(count);
   return { cards, remainingDeck };
 }
-
-export function dealHoleCards(deck: Card[], numPlayers: number): { hands: Card[][]; remainingDeck: Card[] } {
-  const hands: Card[][] = [];
-  let remaining = [...deck];
-
-  for (let i = 0; i < numPlayers; i++) {
-    const result = dealCards(remaining, 2);
-    hands.push(result.cards);
-    remaining = result.remainingDeck;
-  }
-
-  return { hands, remainingDeck: remaining };
-}
