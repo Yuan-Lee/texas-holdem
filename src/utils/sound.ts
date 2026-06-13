@@ -110,8 +110,8 @@ export function playRaise() {
 }
 
 export function playAllIn() {
-  const c = getCtx();
   if (_muted) return;
+  const c = getCtx();
   try {
     const now = c.currentTime;
     for (let i = 0; i < 4; i++) {
@@ -130,8 +130,8 @@ export function playAllIn() {
 }
 
 export function playWin() {
-  const c = getCtx();
   if (_muted) return;
+  const c = getCtx();
   try {
     const now = c.currentTime;
     [523, 659, 784, 1047].forEach((f, i) => {

@@ -76,9 +76,12 @@ export function createStoreMock(partial: Partial<ReturnType<typeof import('../..
   const defaults: ReturnType<typeof import('../../src/store/gameStore').useGameStore.getState> = {
     state: createMockGameState(),
     config: { playerCount: 3, difficulty: Difficulty.Medium, startingChips: 1000, playerName: 'Human' },
-    isAnyAllIn: false,
     isDealing: false,
     gameOver: false,
+    handCount: 0,
+    blindLevel: 0,
+    handHistory: [],
+    handStartChips: [1000, 1000, 1000],
     startGame: vi.fn(),
     playerAction: vi.fn(),
     setState: vi.fn(),

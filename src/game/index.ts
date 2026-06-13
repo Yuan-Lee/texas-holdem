@@ -338,9 +338,14 @@ function advanceRoundInternal(state: GameState): GameState {
 
     // 检查是否所有未弃牌玩家都已 all-in
     const activeNotAllIn = nonFolded.filter(p => !p.isAllIn);
-    if (activeNotAllIn.length > 0) {
-      // 还有需要行动的玩家，结束自动推进
+    if (activeNotAllIn.length > 1) {
+      // 多个玩家还有筹码，需要继续行动
       break;
+    }
+    if (activeNotAllIn.length === 1) {
+      // 唯一有筹码的玩家已匹配下注，对手已 all-in，无需操作直接推进
+      // currentBet === 0 === maxBet（刚收完赌注），条件始终成立
+      continue;
     }
     // 全部 all-in 了，继续推进到下一个 round（发更多公共牌）
   }
@@ -349,7 +354,14 @@ function advanceRoundInternal(state: GameState): GameState {
   newState.minRaise = newState.bigBlind;
   newState.lastActionPlayerIndex = -1;
 
-  newState.currentPlayerIndex = (newState.dealerIndex + 1) % newState.players.length;
+  // 判断是否 heads-up（全场只剩 2 名未出局玩家 —— 包括 fold 的玩家）
+  const activeInGame = newState.players.filter(p => !p.isOut).length;
+  if (activeInGame === 2) {
+    // 两人桌：翻牌后庄家（dealer/SB）先行动
+    newState.currentPlayerIndex = newState.dealerIndex;
+  } else {
+    newState.currentPlayerIndex = (newState.dealerIndex + 1) % newState.players.length;
+  }
   const firstPlayer = newState.players[newState.currentPlayerIndex];
   if (firstPlayer.folded || firstPlayer.isAllIn || firstPlayer.isOut) {
     newState.currentPlayerIndex = getNextActivePlayer(newState, newState.currentPlayerIndex);
@@ -524,7 +536,7 @@ export function getValidActions(state: GameState, playerIndex: number): ActionTy
 
   actions.push(ActionType.Fold);
 
-  if (state.maxBet === 0 || player.currentBet === state.maxBet) {
+  if (state.maxBet === 0 || player.currentBet >= state.maxBet) {
     actions.push(ActionType.Check);
   }
 

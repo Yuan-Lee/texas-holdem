@@ -10,7 +10,7 @@ export const hardAI: AILevel = {
   makeDecision: (state: GameState, playerId: number): AIDecision => {
     const player = state.players[playerId];
     if (!player) return { action: ActionType.Fold };
-    const validActions = getValidActionsForAI(state);
+    const validActions = getValidActionsForAI(state, playerId);
 
     if (validActions.length === 0) {
       return { action: ActionType.Fold };
@@ -80,6 +80,10 @@ function monteCarloSimulation(state: GameState, playerId: number, iterations: nu
 
     const totalCommunity = [...communityCards];
     const remainingCards = 5 - totalCommunity.length;
+    // 牌不够则跳过本次模拟（防御性保护）
+    const cardsNeeded = remainingCards + otherPlayers.length * 2;
+    if (shuffled.length < cardsNeeded) continue;
+
     for (let j = 0; j < remainingCards; j++) {
       totalCommunity.push(shuffled[deckIndex++]);
     }

@@ -27,6 +27,8 @@ interface GameStore {
   handCount: number;
   blindLevel: number;
   handHistory: HandRecord[];
+  /** 每手牌开始前各玩家的筹码快照，用于计算利润 */
+  handStartChips: number[];
   startGame: (config: GameConfig) => void;
   playerAction: (action: ActionType, amount?: number) => void;
   setState: (state: GameState) => void;
@@ -48,6 +50,28 @@ const BLIND_LEVELS = [
 
 const HANDS_PER_LEVEL = 6;
 
+/** 构建手牌记录（`prevChips` 来自 `handStartChips`，即本局开始前的筹码基线） */
+function buildHandRecord(
+  state: GameState,
+  handCount: number,
+  prevChips: number[],
+): HandRecord {
+  const record: HandRecord = {
+    handNumber: handCount + 1,
+    winners: state.winners.map(w => ({
+      name: state.players.find(p => p.id === w.playerId)?.name ?? `P${w.playerId}`,
+      amount: w.amount,
+    })),
+    pot: state.pot,
+    communityCards: state.communityCards.map(c => `${c.rank}${c.suit[0]}`).join(' '),
+    playerProfit: {},
+  };
+  for (const p of state.players) {
+    record.playerProfit[p.id] = p.chips - prevChips[p.id];
+  }
+  return record;
+}
+
 export const useGameStore = create<GameStore>((set, get) => ({
   state: null,
   config: null,
@@ -56,19 +80,34 @@ export const useGameStore = create<GameStore>((set, get) => ({
   handCount: 0,
   blindLevel: 0,
   handHistory: [],
+  handStartChips: [],
 
   startGame: (config: GameConfig) => {
     let state = gameEngine.createGame(config.playerCount, config.difficulty, config.startingChips, config.playerName);
+    const handStartChips = state.players.map(p => p.chips);
     state = gameEngine.startHand(state);
     playShuffle();
-    set({ state, config, gameOver: false, isDealing: true, handCount: 0, blindLevel: 0, handHistory: [] });
+    set({ state, config, gameOver: false, isDealing: true, handCount: 0, blindLevel: 0, handHistory: [], handStartChips });
   },
 
   playerAction: (action: ActionType, amount?: number) => {
-    const { state } = get();
+    let { state } = get();
     if (!state) return;
     playActionSound(action);
-    const newState = gameEngine.performAction(state, action, amount);
+    let newState = gameEngine.performAction(state, action, amount);
+
+    // Safety: if the engine rejected the action (returns the same reference)
+    // the store won't trigger a re-render, causing the game to hang.
+    // Force-fold the current player to unstick the game.
+    if (newState === state) {
+      newState = gameEngine.performAction(state, ActionType.Fold);
+      if (newState === state) {
+        // Even Fold failed — force a new reference so the UI re-renders
+        newState = { ...state, players: [...state.players] };
+        return set({ state: newState });
+      }
+    }
+
     const winners = newState.winners;
     if (winners && winners.length > 0) {
       const humanWon = winners.some(w => w.playerId === 0);
@@ -82,33 +121,22 @@ export const useGameStore = create<GameStore>((set, get) => ({
   },
 
   nextHand: () => {
-    const { state, config, handCount, blindLevel } = get();
+    const { state, config, handCount, blindLevel, handStartChips } = get();
     if (!state || !config) return;
 
-    // Record hand history
-    const prevChips = state.players.map(p => p.chips);
+    // Record hand history — use baseline from before this hand
+    const prevChips = handStartChips;
 
     // Mark out players and check game over
     const players = state.players.map(p =>
       p.chips <= 0 && p.id !== 0 ? { ...p, isOut: true } : p
     );
 
+    const record = buildHandRecord(state, handCount, prevChips);
+
     const humanPlayer = players[0];
     if (humanPlayer.chips <= 0) {
       playLose();
-      const record: HandRecord = {
-        handNumber: handCount + 1,
-        winners: state.winners.map(w => ({
-          name: state.players.find(p => p.id === w.playerId)?.name ?? `P${w.playerId}`,
-          amount: w.amount,
-        })),
-        pot: state.pot,
-        communityCards: state.communityCards.map(c => `${c.rank}${c.suit[0]}`).join(' '),
-        playerProfit: {},
-      };
-      for (const p of state.players) {
-        record.playerProfit[p.id] = p.chips - prevChips[p.id];
-      }
       set({
         gameOver: true,
         state: { ...state, players, handComplete: true },
@@ -120,40 +148,12 @@ export const useGameStore = create<GameStore>((set, get) => ({
     const remaining = players.filter(p => !p.isOut);
     if (remaining.length <= 1) {
       playWin();
-      const record: HandRecord = {
-        handNumber: handCount + 1,
-        winners: state.winners.map(w => ({
-          name: state.players.find(p => p.id === w.playerId)?.name ?? `P${w.playerId}`,
-          amount: w.amount,
-        })),
-        pot: state.pot,
-        communityCards: state.communityCards.map(c => `${c.rank}${c.suit[0]}`).join(' '),
-        playerProfit: {},
-      };
-      for (const p of state.players) {
-        record.playerProfit[p.id] = p.chips - prevChips[p.id];
-      }
       set({
         gameOver: true,
         state: { ...state, players, handComplete: true },
         handHistory: [...get().handHistory, record],
       });
       return;
-    }
-
-    // Record this hand in history
-    const record: HandRecord = {
-      handNumber: handCount + 1,
-      winners: state.winners.map(w => ({
-        name: state.players.find(p => p.id === w.playerId)?.name ?? `P${w.playerId}`,
-        amount: w.amount,
-      })),
-      pot: state.pot,
-      communityCards: state.communityCards.map(c => `${c.rank}${c.suit[0]}`).join(' '),
-      playerProfit: {},
-    };
-    for (const p of state.players) {
-      record.playerProfit[p.id] = p.chips - prevChips[p.id];
     }
 
     const newHandCount = handCount + 1;
@@ -169,6 +169,8 @@ export const useGameStore = create<GameStore>((set, get) => ({
       smallBlind: level.sb,
       bigBlind: level.bb,
     };
+    // Save baseline chips before next hand starts
+    const nextHandStartChips = preppedState.players.map(p => p.chips);
     const finalState = gameEngine.startHand(preppedState);
 
     playShuffle();
@@ -179,6 +181,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
       handCount: newHandCount,
       blindLevel: newBlindLevel,
       handHistory: [...get().handHistory, record],
+      handStartChips: nextHandStartChips,
     });
   },
 

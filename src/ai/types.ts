@@ -16,8 +16,8 @@ export interface AILevel {
 /**
  * 获取 AI 玩家当前可用的动作列表（委托给引擎实现）
  */
-export function getValidActionsForAI(state: GameState): ActionType[] {
-  return getValidActions(state, state.currentPlayerIndex);
+export function getValidActionsForAI(state: GameState, playerId: number): ActionType[] {
+  return getValidActions(state, playerId);
 }
 
 /**

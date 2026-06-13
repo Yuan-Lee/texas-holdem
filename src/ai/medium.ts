@@ -9,7 +9,7 @@ export const mediumAI: AILevel = {
   makeDecision: (state: GameState, playerId: number): AIDecision => {
     const player = state.players[playerId];
     if (!player) return { action: ActionType.Fold };
-    const validActions = getValidActionsForAI(state);
+    const validActions = getValidActionsForAI(state, playerId);
 
     if (validActions.length === 0) {
       return { action: ActionType.Fold };

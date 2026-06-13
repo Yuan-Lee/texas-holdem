@@ -24,12 +24,35 @@ function actionButtonStyle(color: string): React.CSSProperties {
   };
 }
 
-const SHORTCUT_STYLE: React.CSSProperties = {
-  fontSize: 10,
-  opacity: 0.6,
-  marginLeft: 4,
-  fontWeight: 400,
-};
+/** 快捷键键帽徽标 */
+function KbdBadge({ letter }: { letter: string }) {
+  return (
+    <span
+      style={{
+        display: 'inline-flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        minWidth: 18,
+        height: 16,
+        padding: '0 4px',
+        marginLeft: 6,
+        borderRadius: 3,
+        background: 'rgba(0, 0, 0, 0.45)',
+        border: '1px solid rgba(255, 255, 255, 0.12)',
+        borderBottom: '2px solid rgba(0, 0, 0, 0.35)',
+        color: 'rgba(255, 255, 255, 0.85)',
+        fontSize: 10,
+        fontFamily: "'SF Mono', 'Cascadia Code', 'Courier New', monospace",
+        fontWeight: 700,
+        lineHeight: 1,
+        boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.08)',
+        userSelect: 'none',
+      }}
+    >
+      {letter}
+    </span>
+  );
+}
 
 export function ActionPanel({ playerIndex }: ActionPanelProps) {
   const { state, playerAction } = useGameStore();
@@ -109,17 +132,17 @@ export function ActionPanel({ playerIndex }: ActionPanelProps) {
     >
       {canFold && (
         <button onClick={() => handleAction(ActionType.Fold)} style={actionButtonStyle('#c0392b')}>
-          弃牌<span style={SHORTCUT_STYLE}>F</span>
+          弃牌<KbdBadge letter="F" />
         </button>
       )}
       {canCheck && (
         <button onClick={() => handleAction(ActionType.Check)} style={actionButtonStyle('#2980b9')}>
-          过牌<span style={SHORTCUT_STYLE}>C</span>
+          过牌<KbdBadge letter="C" />
         </button>
       )}
       {canCall && (
         <button onClick={() => handleAction(ActionType.Call)} style={actionButtonStyle('#27ae60')}>
-          跟注{!canCheck && <span style={SHORTCUT_STYLE}>C</span>} {callAmount > 0 ? `(${callAmount})` : ''}
+          跟注{!canCheck && <KbdBadge letter="C" />} {callAmount > 0 ? `(${callAmount})` : ''}
         </button>
       )}
       {canRaise && (
@@ -145,13 +168,13 @@ export function ActionPanel({ playerIndex }: ActionPanelProps) {
               ...(showRaisePopup ? { boxShadow: '0 0 0 2px #f39c12, 0 0 12px rgba(243,156,18,0.5)' } : {}),
             }}
           >
-            加注<span style={SHORTCUT_STYLE}>R</span>
+            加注<KbdBadge letter="R" />
           </button>
         </div>
       )}
       {canAllIn && (
         <button onClick={() => handleAction(ActionType.AllIn)} style={actionButtonStyle('#e74c3c')}>
-          全押<span style={SHORTCUT_STYLE}>A</span> ({player.chips})
+          全押<KbdBadge letter="A" /> ({player.chips})
         </button>
       )}
     </div>
