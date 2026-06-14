@@ -3,6 +3,7 @@ import type { GameState, Winner } from '../engine/types';
 import { ActionType, Difficulty } from '../engine/types';
 import * as gameEngine from '../game';
 import { playDeal, playShuffle, playActionSound, playWin, playLose } from '../utils/sound';
+import { globalTracker } from '../ai/opponentModel';
 
 interface GameConfig {
   playerCount: number;
@@ -87,6 +88,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
     const handStartChips = state.players.map(p => p.chips);
     state = gameEngine.startHand(state);
     playShuffle();
+    globalTracker.reset(); // 新游戏清除旧数据
     set({ state, config, gameOver: false, isDealing: true, handCount: 0, blindLevel: 0, handHistory: [], handStartChips });
   },
 
@@ -133,6 +135,17 @@ export const useGameStore = create<GameStore>((set, get) => ({
     );
 
     const record = buildHandRecord(state, handCount, prevChips);
+
+    // 更新对手画像：通知 tracker 每手牌结束的结果
+    for (const player of state.players) {
+      if (player.isAI) {
+        const sawFlop = state.communityCards.length >= 3;
+        const sawShowdown = state.handComplete && !player.folded && !player.isOut;
+        const wasVoluntary = player.totalBet > (player.isSmallBlind ? state.smallBlind : 0) ||
+                             player.totalBet > (player.isBigBlind ? state.bigBlind : 0);
+        globalTracker.recordHandResult(player.id, { sawFlop, sawShowdown, wasVoluntary });
+      }
+    }
 
     const humanPlayer = players[0];
     if (humanPlayer.chips <= 0) {
