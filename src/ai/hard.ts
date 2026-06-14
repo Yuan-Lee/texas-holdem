@@ -8,6 +8,18 @@ import { globalTracker } from './opponentModel';
 import { getPreflopTier, getPositionLabel, getPreflopAction } from './preflopTable';
 import { calculateBetSize, calculatePreflopBetSize } from './betSizer';
 
+// ── Constants ──
+
+const SHORT_STACK_BB = 10;
+const MC_TIME_BUDGET_MS = 1500;
+const MC_MAX_SIMULATIONS = 3000;
+const PERTURBATION_RATE = 0.1;
+const PERTURBATION_EV_THRESHOLD = 0.85;
+const CBET_FOLD_THRESHOLD = 0.6;
+const POT_ODDS_CALL_THRESHOLD = 0.25;
+const POT_ODDS_FOLD_THRESHOLD = 0.35;
+const NUTS_RANK = 8;
+
 // ── Utility functions ──
 
 function getPlayer(state: GameState, playerId: number) {
@@ -16,6 +28,11 @@ function getPlayer(state: GameState, playerId: number) {
 
 function isValidAction(action: ActionType, validActions: ActionType[]): boolean {
   return validActions.includes(action);
+}
+
+/** Filter for active opponents (not folded, not out, not self) */
+function getActiveOpponents(state: GameState, playerId: number) {
+  return state.players.filter(p => !p.folded && !p.isOut && p.id !== playerId);
 }
 
 /** Determine board texture from community cards */
@@ -40,7 +57,7 @@ function isNuts(state: GameState, playerId: number): boolean {
   const player = getPlayer(state, playerId);
   if (!player || state.communityCards.length < 3) return false;
   const result = evaluator.evaluateHand([...player.holeCards, ...state.communityCards]);
-  return result.rank >= 8;
+  return result.rank >= NUTS_RANK;
 }
 
 // ── Layer 1: Heuristic quick decisions ──
@@ -51,9 +68,9 @@ function layer1Heuristic(
   const player = getPlayer(state, playerId);
   if (!player) return { action: ActionType.Fold };
 
-  // Short stack (<10BB) → push/fold
+  // Short stack → push/fold
   const bbSize = state.bigBlind;
-  if (player.chips <= bbSize * 10) {
+  if (player.chips <= bbSize * SHORT_STACK_BB) {
     const handResult = state.communityCards.length >= 3
       ? evaluator.evaluateHand([...player.holeCards, ...state.communityCards])
       : null;
@@ -84,7 +101,7 @@ function layer1Heuristic(
     const position = getPositionLabel(
       playerId, state.dealerIndex,
       player.isSmallBlind, player.isBigBlind,
-      state.players.filter(p => !p.isOut).length,
+      getActiveOpponents(state, playerId).length + 1,
     );
     const tier = getPreflopTier(player.holeCards);
     const facingRaise = state.maxBet > (player.isBigBlind ? state.bigBlind : 0);
@@ -115,7 +132,7 @@ function layer2RangeInference(
   const callAmount = state.maxBet - player.currentBet;
   const potOddsPercent = callAmount > 0 ? callAmount / (state.pot + callAmount) : 0;
 
-  const opponents = state.players.filter(p => !p.folded && !p.isOut && p.id !== playerId);
+  const opponents = getActiveOpponents(state, playerId);
   const profiles = opponents.map(p => ({
     player: p,
     profile: globalTracker.getProfile(p.id),
@@ -127,17 +144,17 @@ function layer2RangeInference(
   }
 
   // One pair+, good pot odds → call
-  if (handResult.rank >= 1 && potOddsPercent < 0.25 && isValidAction(ActionType.Call, validActions)) {
+  if (handResult.rank >= 1 && potOddsPercent < POT_ODDS_CALL_THRESHOLD && isValidAction(ActionType.Call, validActions)) {
     return { action: ActionType.Call };
   }
 
   // High card, bad pot odds → fold
-  if (handResult.rank === 0 && potOddsPercent > 0.35) {
+  if (handResult.rank === 0 && potOddsPercent > POT_ODDS_FOLD_THRESHOLD) {
     if (isValidAction(ActionType.Fold, validActions)) return { action: ActionType.Fold };
   }
 
   // Opponent high foldToCBet → can c-bet bluff
-  const highFoldCBet = profiles.some(p => p.profile.totalHands > 2 && p.profile.foldToCBet > 0.6);
+  const highFoldCBet = profiles.some(p => p.profile.totalHands > 2 && p.profile.foldToCBet > CBET_FOLD_THRESHOLD);
   if (highFoldCBet && callAmount === 0 && isValidAction(ActionType.Raise, validActions)) {
     return { action: ActionType.Raise, amount: 0 };
   }
@@ -159,7 +176,7 @@ function layer3MCSimulation(
     return { action: ActionType.Fold };
   }
 
-  const timeBudgetMs = 1500;
+  const timeBudgetMs = MC_TIME_BUDGET_MS;
   const startTime = performance.now();
 
   const currentResult = evaluator.evaluateHand([...player.holeCards, ...state.communityCards]);
@@ -167,7 +184,7 @@ function layer3MCSimulation(
   const deck = deckUtils.createDeck().filter(
     c => !knownCards.some(k => k.suit === c.suit && k.rank === c.rank),
   );
-  const otherPlayers = state.players.filter(p => !p.folded && !p.isOut && p.id !== playerId);
+  const otherPlayers = getActiveOpponents(state, playerId);
 
   interface ActionEV { action: ActionType; amount?: number; ev: number }
   const results: ActionEV[] = [];
@@ -183,7 +200,7 @@ function layer3MCSimulation(
     const remainingCards = 5 - state.communityCards.length;
     const cardsNeeded = remainingCards + otherPlayers.length * 2;
 
-    while (simCount < 3000) {
+    while (simCount < MC_MAX_SIMULATIONS) {
       if (performance.now() - startTime > timeBudgetMs) break;
 
       const shuffled = deckUtils.shuffleDeck(deck);
@@ -202,20 +219,30 @@ function layer3MCSimulation(
         bestOpponentValue = Math.max(bestOpponentValue, oppResult.value);
       }
 
-      const showdownPot = state.pot + (action === ActionType.Call ? state.maxBet - player.currentBet : 0);
-      let actionEV = 0;
+      // Cost of this action (additional chips player puts in to see showdown)
+      const actionCost = action === ActionType.Call
+        ? state.maxBet - player.currentBet
+        : action === ActionType.Raise
+          ? state.maxBet - player.currentBet + state.minRaise
+          : 0;
+
+      const finalPot = state.pot + actionCost;
+      let netEV = 0;
       if (playerResult.value > bestOpponentValue) {
-        actionEV = showdownPot;
+        netEV = finalPot - actionCost;
       } else if (playerResult.value === bestOpponentValue) {
         // Split pot: equal share among tied players
         const tiedCount = 1 + otherPlayers.filter(o => {
           const oResult = evaluator.evaluateHand([...o.holeCards, ...totalCommunity]);
           return oResult.value === playerResult.value;
         }).length;
-        actionEV = showdownPot / tiedCount;
+        netEV = (finalPot / tiedCount) - actionCost;
+      } else {
+        // Loss: player forfeits the cost of the action
+        netEV = -actionCost;
       }
 
-      totalEV += actionEV;
+      totalEV += netEV;
       simCount++;
     }
 
@@ -234,9 +261,9 @@ function layer3MCSimulation(
   const best = results[0];
 
   // 10% strategy perturbation: sometimes pick second-best to avoid being exploited
-  if (results.length > 1 && Math.random() < 0.1) {
+  if (results.length > 1 && Math.random() < PERTURBATION_RATE) {
     const second = results[1];
-    if (second.ev >= best.ev * 0.85) {
+    if (second.ev >= best.ev * PERTURBATION_EV_THRESHOLD) {
       return buildFinalAction(state, playerId, second.action, validActions, currentResult);
     }
   }
@@ -273,6 +300,11 @@ function buildFinalAction(
   const boardTexture = getBoardTexture(state.communityCards);
   const intention = handResult.rank >= 4 ? 'value' : handResult.rank >= 2 ? 'semiBluff' : 'bluff';
 
+  const opponents = getActiveOpponents(state, playerId);
+  const avgOpponentFoldCBet = opponents.length > 0
+    ? opponents.reduce((sum, o) => sum + globalTracker.getProfile(o.id).foldToCBet, 0) / opponents.length
+    : 0;
+
   const amount = calculateBetSize({
     potSize: state.pot,
     stackSize: player.chips,
@@ -282,10 +314,6 @@ function buildFinalAction(
     handValue: handResult.value,
     boardTexture,
     intention,
-    const opponents = state.players.filter(p => !p.folded && !p.isOut && p.id !== playerId);
-    const avgOpponentFoldCBet = opponents.length > 0
-      ? opponents.reduce((sum, o) => sum + globalTracker.getProfile(o.id).foldToCBet, 0) / opponents.length
-      : 0;
     opponentFoldCBet: avgOpponentFoldCBet,
   });
 
