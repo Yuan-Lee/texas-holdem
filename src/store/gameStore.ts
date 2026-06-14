@@ -141,8 +141,8 @@ export const useGameStore = create<GameStore>((set, get) => ({
       if (player.isAI) {
         const sawFlop = state.communityCards.length >= 3;
         const sawShowdown = state.handComplete && !player.folded && !player.isOut;
-        const wasVoluntary = player.totalBet > (player.isSmallBlind ? state.smallBlind : 0) ||
-                             player.totalBet > (player.isBigBlind ? state.bigBlind : 0);
+        const wasVoluntary = player.totalBet > (player.isSmallBlind ? state.smallBlind : 0) +
+                             (player.isBigBlind ? state.bigBlind : 0);
         globalTracker.recordHandResult(player.id, { sawFlop, sawShowdown, wasVoluntary });
       }
     }
