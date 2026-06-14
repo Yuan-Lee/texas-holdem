@@ -253,7 +253,10 @@ function buildFinalAction(
   }
 
   if (!isValidAction(ActionType.Raise, validActions)) {
-    return { action: ActionType.Raise, amount: calculatePreflopBetSize(state.bigBlind, 0, state.players[playerId]?.chips ?? 0, 0) };
+    // Raise not available — fall back to call or check
+    if (isValidAction(ActionType.Call, validActions)) return { action: ActionType.Call };
+    if (isValidAction(ActionType.Check, validActions)) return { action: ActionType.Check };
+    return { action: ActionType.Fold };
   }
 
   const player = getPlayer(state, playerId)!;
@@ -279,7 +282,11 @@ function buildFinalAction(
     handValue: handResult.value,
     boardTexture,
     intention,
-    opponentFoldCBet: globalTracker.getProfile(playerId).foldToCBet,
+    const opponents = state.players.filter(p => !p.folded && !p.isOut && p.id !== playerId);
+    const avgOpponentFoldCBet = opponents.length > 0
+      ? opponents.reduce((sum, o) => sum + globalTracker.getProfile(o.id).foldToCBet, 0) / opponents.length
+      : 0;
+    opponentFoldCBet: avgOpponentFoldCBet,
   });
 
   return { action: ActionType.Raise, amount };
