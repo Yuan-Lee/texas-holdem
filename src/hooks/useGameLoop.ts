@@ -95,7 +95,7 @@ export function useGameLoop() {
           playerAction(ActionType.Fold);
         } catch { /* safety net in playerAction handles it */ }
       }
-    }, THINK_DELAY);
+    }, isAITurn && config?.difficulty === Difficulty.Hard ? 2500 : THINK_DELAY);
 
     return () => {
       // Mark this generation as stale so the timeout callback is a no-op
