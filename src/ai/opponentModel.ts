@@ -26,9 +26,7 @@ interface PlayerStats {
   flopSeen: number;
   /** 看到摊牌的手数（用于WTSD） */
   showdownSeen: number;
-  /** 本手牌是否在翻牌前有主动行动 */
-  hasPreflopAction: boolean;
-}
+  }
 
 export class ProfileTracker {
   private stats: Map<number, PlayerStats> = new Map();
@@ -46,7 +44,6 @@ export class ProfileTracker {
         cBetFolded: 0,
         flopSeen: 0,
         showdownSeen: 0,
-        hasPreflopAction: false,
       };
       this.stats.set(playerId, s);
     }
@@ -55,14 +52,13 @@ export class ProfileTracker {
 
   /** 标记一手牌开始（重置手牌级标记） */
   recordHandStart(playerId: number): void {
-    const s = this.getStats(playerId);
-    s.hasPreflopAction = false;
+    // No-op: currently no per-hand state to reset;
+    // exists as hook for future per-hand tracking.
   }
 
   /** 记录翻牌前行动 */
   recordPreflopAction(playerId: number, action: ActionType): void {
     const s = this.getStats(playerId);
-    s.hasPreflopAction = true;
     if (action === ActionType.Raise || action === ActionType.AllIn) {
       s.preflopRaiseHands++;
     }
