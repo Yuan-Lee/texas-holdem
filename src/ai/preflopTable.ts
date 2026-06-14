@@ -11,7 +11,7 @@ function handKey(cards: Card[]): string {
 // Tier 1 (最强): AA, KK, QQ, JJ, AKs
 // Tier 2 (强): AKo, TT, AQs, AJs, KQs, 99
 // Tier 3 (中等): AQo, ATo, ATs, KJs, QJs, JTs, 88, 77, AJo, KQo
-// Tier 4 (可玩): ATo, KTo, QJo, JTo, 66, 55, 44, T9s, 98s, 87s, A2s-A9s, K9s, Q9s
+// Tier 4 (可玩): KTo, QJo, JTo, 66, 55, 44, T9s, 98s, 87s, A2s-A9s, K9s, Q9s
 // Tier 5 (垃圾): 其余
 
 const TIER1 = new Set([
@@ -39,7 +39,6 @@ const TIER3 = new Set([
 ]);
 
 const TIER4 = new Set([
-  '14-10o',
   '13-10o',
   '12-11o',
   '11-10o',
