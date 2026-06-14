@@ -60,6 +60,6 @@ export function calculatePreflopBetSize(
   }
 
   const desired = Math.round(blindsSize * multiplier / 10) * 10;
-  const totalBet = currentBet + Math.max(desired, currentBet);
+  const totalBet = Math.max(desired, currentBet);
   return Math.min(totalBet, currentBet + stackSize);
 }

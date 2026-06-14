@@ -62,4 +62,11 @@ describe('calculatePreflopBetSize', () => {
     const result = calculatePreflopBetSize(20, 0, 40, 0);
     expect(result).toBe(40);
   });
+
+  it('已有下注时重新加注（3-bet）', () => {
+    // currentBet=20 (盲注), 3-bet 期望 3.5BB=70
+    const result = calculatePreflopBetSize(20, 20, 1000, 1);
+    expect(result).toBeGreaterThanOrEqual(65);
+    expect(result).toBeLessThanOrEqual(75);
+  });
 });
