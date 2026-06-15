@@ -306,20 +306,6 @@ function advanceRoundInternal(state: GameState): GameState {
       return showdownInternal(newState);
     }
 
-    // 烧牌（标准规则：每轮发公共牌前烧一张）
-    const burnResult = deckUtils.dealCards(newState.deck, 1);
-
-    // 发公共牌
-    if (newState.currentRound === Round.Flop) {
-      const { cards, remainingDeck } = deckUtils.dealCards(burnResult.remainingDeck, 3);
-      newState.communityCards = cards;
-      newState.deck = remainingDeck;
-    } else if (newState.currentRound === Round.Turn || newState.currentRound === Round.River) {
-      const { cards, remainingDeck } = deckUtils.dealCards(burnResult.remainingDeck, 1);
-      newState.communityCards = [...newState.communityCards, ...cards];
-      newState.deck = remainingDeck;
-    }
-
     // 收拢赌注（所有玩家的下注都进入 pot + totalBet，包括已弃牌的）
     newState.maxBet = 0;
     for (const player of newState.players) {
@@ -334,6 +320,20 @@ function advanceRoundInternal(state: GameState): GameState {
     const nonFolded = newState.players.filter(p => !p.folded && !p.isOut);
     if (nonFolded.length <= 1) {
       return showdownInternal(newState);
+    }
+
+    // 烧牌（标准规则：每轮发公共牌前烧一张）
+    const burnResult = deckUtils.dealCards(newState.deck, 1);
+
+    // 发公共牌
+    if (newState.currentRound === Round.Flop) {
+      const { cards, remainingDeck } = deckUtils.dealCards(burnResult.remainingDeck, 3);
+      newState.communityCards = cards;
+      newState.deck = remainingDeck;
+    } else if (newState.currentRound === Round.Turn || newState.currentRound === Round.River) {
+      const { cards, remainingDeck } = deckUtils.dealCards(burnResult.remainingDeck, 1);
+      newState.communityCards = [...newState.communityCards, ...cards];
+      newState.deck = remainingDeck;
     }
 
     // 检查是否所有未弃牌玩家都已 all-in
