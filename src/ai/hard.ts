@@ -138,7 +138,7 @@ function layer2RangeInference(
     profile: globalTracker.getProfile(p.id),
   }));
 
-  // Strong hand, can check → check to induce bluff or free card
+  // Strong hand with free check → defer to MC for optimal decision (value bet vs check)
   if (handResult.rank >= 2 && callAmount === 0 && isValidAction(ActionType.Check, validActions)) {
     return null;
   }
