@@ -130,7 +130,7 @@ export function PlayerSeat({
                 {!hideCards && (
                   <CardView
                     card={card}
-                    hidden={!isHuman && !showAllCards && !player.folded}
+                    hidden={!isHuman && (!showAllCards || player.folded)}
                     size="sm"
                   />
                 )}
