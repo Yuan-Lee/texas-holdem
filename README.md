@@ -18,12 +18,48 @@
 # 安装依赖
 npm install
 
-# 启动开发服务器
+# 启动开发服务器（网页版）
 npm run dev
 
-# 构建生产版本
+# 构建生产版本（网页版）
 npm run build
 ```
+
+## macOS 桌面应用
+
+该项目也可打包为 macOS 原生桌面应用（基于 Tauri v2），包体积仅约 8 MB。
+
+### 前置条件
+
+```bash
+# 安装 Rust 工具链
+curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
+
+# 确保已安装 Xcode Command Line Tools
+xcode-select --install
+```
+
+### 开发（桌面版）
+
+```bash
+npm run tauri dev
+```
+
+会自动打开原生 macOS 窗口，支持 HMR 热更新。
+
+### 打包
+
+```bash
+npm run tauri build
+```
+
+生成 `.app` 和 `.dmg`，位于 `src-tauri/target/release/bundle/` 目录下。
+
+### 注意事项
+
+- 桌面版与网页版共享同一份源代码，互不干扰
+- 网页版开发命令（`npm run dev`、`npm run build`）完全不变
+- Tauri 配置集中在 `src-tauri/` 目录中
 
 ## 测试
 

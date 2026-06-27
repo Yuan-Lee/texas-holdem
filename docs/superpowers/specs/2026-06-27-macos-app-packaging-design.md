@@ -97,7 +97,7 @@ src-tauri/target/
 ## 应用配置
 
 - **应用名称**: Texas Hold'em
-- **Bundle ID**: com.yourname.texas-holdem
+- **Bundle ID**: com.texas-holdem
 - **最低系统**: macOS 13.0+ (Ventura)
 - **窗口默认尺寸**: 1200 x 800
 - **窗口最小尺寸**: 900 x 650
